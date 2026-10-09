@@ -10,7 +10,7 @@
 
   <div id="app-container">
 
-    <!-- Sync & User Status Header -->
+    <!-- Top Sync & Account Info -->
     <div class="top-bar">
       <div class="user-badge"><i class="fa-solid fa-user-shield"></i> <span id="user-email-display">Loading...</span></div>
       <div class="sync-indicator">
@@ -19,7 +19,7 @@
       </div>
     </div>
 
-    <!-- MAIN APP HEADER (Matching DASHBOARD F.jpg) -->
+    <!-- MAIN COMPANY HEADER (DASHBOARD F.jpg) -->
     <header class="company-header">
       <div class="header-side header-left">BIKASH DEB ROY</div>
       <div class="header-center">
@@ -29,24 +29,19 @@
       <div class="header-side header-right">MD ANWAR HOSSAIN</div>
     </header>
 
-    <!-- LOADING OVERLAY -->
+    <!-- LOADING & TOAST -->
     <div id="loading-overlay" class="loading-overlay hidden">
       <div class="spinner"></div>
       <div id="loading-text">Communicating with Google Sheets...</div>
     </div>
-
-    <!-- NOTIFICATION BAR -->
     <div id="toast-message" class="toast hidden"></div>
 
-    <!-- MAIN CONTENT CONTAINERS -->
+    <!-- MAIN VIEWS -->
     <main id="main-content">
 
-      <!-- ========================================== -->
-      <!-- VIEW 1: DASHBOARD (Matching DASHBOARD F.jpg) -->
-      <!-- ========================================== -->
+      <!-- VIEW 1: DASHBOARD -->
       <section id="view-dashboard" class="app-view active">
         
-        <!-- Live Summary Cards -->
         <div class="summary-cards-grid">
           <div class="card card-blue" onclick="navigateTo('view-clients')">
             <div class="card-icon"><i class="fa-solid fa-users"></i></div>
@@ -85,25 +80,23 @@
           </div>
         </div>
 
-        <!-- 3 Large Pastel Action Buttons -->
         <div class="shortcut-buttons-grid">
           <button class="btn-shortcut btn-pastel-blue" onclick="openAddClientForm()">
-            <div class="shortcut-icon-box"><i class="fa-solid fa-users"></i><i class="fa-solid fa-plus icon-sub"></i></div>
-            <div class="shortcut-label">ADD CLIENTS</div>
+            <div class="shortcut-icon-box"><i class="fa-solid fa-users"></i></div>
+            <div class="shortcut-label">+ ADD CLIENTS</div>
           </button>
 
           <button class="btn-shortcut btn-pastel-pink" onclick="openAddTaskForm()">
-            <div class="shortcut-icon-box"><i class="fa-solid fa-clipboard-check"></i><i class="fa-solid fa-plus icon-sub"></i></div>
-            <div class="shortcut-label">ADD TASK</div>
+            <div class="shortcut-icon-box"><i class="fa-solid fa-clipboard-check"></i></div>
+            <div class="shortcut-label">+ ADD TASK</div>
           </button>
 
           <button class="btn-shortcut btn-pastel-green" onclick="openAddPropertyForm()">
-            <div class="shortcut-icon-box"><i class="fa-solid fa-house"></i><i class="fa-solid fa-plus icon-sub"></i></div>
-            <div class="shortcut-label">ADD PROPERTY</div>
+            <div class="shortcut-icon-box"><i class="fa-solid fa-house"></i></div>
+            <div class="shortcut-label">+ ADD PROPERTY</div>
           </button>
         </div>
 
-        <!-- 2 Matchmaker Buttons -->
         <div class="matchmaker-buttons-grid">
           <button class="btn-matchmaker btn-match-green" onclick="openMatchmakerModal('property')">
             <i class="fa-solid fa-magnifying-glass search-icon"></i>
@@ -116,7 +109,6 @@
           </button>
         </div>
 
-        <!-- Today's Task List Panel -->
         <div class="todays-task-panel">
           <div class="panel-left-title">
             <div>TODAY'S</div>
@@ -131,16 +123,13 @@
 
       </section>
 
-      <!-- ========================================== -->
-      <!-- VIEW 2: CLIENTS LIST & FORM -->
-      <!-- ========================================== -->
+      <!-- VIEW 2: CLIENTS LIST -->
       <section id="view-clients" class="app-view">
         <div class="view-header-bar">
           <h2><i class="fa-solid fa-users"></i> Client Records</h2>
           <button class="btn-primary" onclick="openAddClientForm()"><i class="fa-solid fa-plus"></i> Add New Client</button>
         </div>
 
-        <!-- Search & Filter Controls -->
         <div class="filter-card">
           <div class="filter-row">
             <input type="text" id="client-search" placeholder="Search by ID, Name, Phone, Location, Intended Use..." onkeyup="filterClientsTable()">
@@ -171,14 +160,12 @@
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="clients-tbody">
-              <!-- Dynamically Populated -->
-            </tbody>
+            <tbody id="clients-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <!-- CLIENT FORM MODAL -->
+      <!-- ADD/EDIT CLIENT FORM MODAL -->
       <div id="modal-client-form" class="modal hidden">
         <div class="modal-content modal-large">
           <div class="modal-header">
@@ -200,13 +187,13 @@
               </div>
 
               <div class="form-group">
-                <label>Client Name *</label>
-                <input type="text" id="c-name" required placeholder="Full Name">
+                <label>Name *</label>
+                <input type="text" id="c-name" required placeholder="Client Full Name">
               </div>
 
               <div class="form-group">
-                <label>Phone Number *</label>
-                <input type="text" id="c-phone" required placeholder="e.g. +91 9876543210">
+                <label>Phone *</label>
+                <input type="text" id="c-phone" required placeholder="Phone Number">
               </div>
 
               <div class="form-group full-width">
@@ -214,53 +201,17 @@
                 <textarea id="c-address" rows="2" placeholder="Residential/Business address"></textarea>
               </div>
 
-              <div class="form-group">
-                <label>Intended Use (Select Multiple)</label>
-                <select id="c-intended" multiple class="multi-select">
-                  <option value="RESIDENT">RESIDENT</option>
-                  <option value="FARMHOUSE">FARMHOUSE</option>
-                  <option value="SECOND HOME">SECOND HOME</option>
-                  <option value="INVESTMENT">INVESTMENT</option>
-                  <option value="HOUSHING PROJECT">HOUSHING PROJECT</option>
-                  <option value="RESORT">RESORT</option>
-                  <option value="HOMESTAY">HOMESTAY</option>
-                  <option value="HOTEL">HOTEL</option>
-                  <option value="RESTURENT">RESTURENT</option>
-                  <option value="FACTORY">FACTORY</option>
-                  <option value="FARMING">FARMING</option>
-                  <option value="TEA PLANTATION">TEA PLANTATION</option>
-                  <option value="POULTRY FARMING">POULTRY FARMING</option>
-                  <option value="HATACHERY">HATACHERY</option>
-                  <option value="AYURVEDA">AYURVEDA</option>
-                  <option value="FISHARY">FISHARY</option>
-                  <option value="SCHOOL">SCHOOL</option>
-                  <option value="HOSPITAL">HOSPITAL</option>
-                  <option value="ASHRAM">ASHRAM</option>
-                  <option value="AGRICULTURE">AGRICULTURE</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+              <!-- Intended Use Multi-Select Grid Chart -->
+              <div class="form-group full-width">
+                <label>Intended Use (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-c-intended"></div>
                 <input type="text" id="c-intended-other" class="hidden other-input" placeholder="Specify Other Intended Use">
               </div>
 
-              <div class="form-group">
-                <label>Specialty (Select Multiple)</label>
-                <select id="c-specialty" multiple class="multi-select">
-                  <option value="CORE HILL">CORE HILL</option>
-                  <option value="HILL VIEW">HILL VIEW</option>
-                  <option value="KJ VIEW">KJ VIEW</option>
-                  <option value="RIVER SIDE">RIVER SIDE</option>
-                  <option value="NH 17 SIDE">NH 17 SIDE</option>
-                  <option value="NH 717 SIDE">NH 717 SIDE</option>
-                  <option value="REMOTE AREA">REMOTE AREA</option>
-                  <option value="BAZAR AREA">BAZAR AREA</option>
-                  <option value="FOREST SIDE">FOREST SIDE</option>
-                  <option value="DONBOSKO AREA">DONBOSKO AREA</option>
-                  <option value="HIGH LAND">HIGH LAND</option>
-                  <option value="UP & DOWN LAND">UP & DOWN LAND</option>
-                  <option value="SWAMP LAND">SWAMP LAND</option>
-                  <option value="PADDY FIELD">PADDY FIELD</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+              <!-- Specialty Multi-Select Grid Chart -->
+              <div class="form-group full-width">
+                <label>Specialty (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-c-specialty"></div>
                 <input type="text" id="c-specialty-other" class="hidden other-input" placeholder="Specify Other Specialty">
               </div>
 
@@ -282,47 +233,10 @@
                 </select>
               </div>
 
+              <!-- Exact "Location" Header Title -->
               <div class="form-group full-width">
-                <label>Preferred Locations (Select Multiple)</label>
-                <select id="c-location" multiple class="multi-select">
-                  <option value="NOT SPECIFIC">NOT SPECIFIC</option>
-                  <option value="OODLABARI">OODLABARI</option>
-                  <option value="DON BOSKO">DON BOSKO</option>
-                  <option value="TURIBARI">TURIBARI</option>
-                  <option value="MANABARI">MANABARI</option>
-                  <option value="P DAMDIM">P DAMDIM</option>
-                  <option value="MALBAZAR">MALBAZAR</option>
-                  <option value="BORODIGHI">BORODIGHI</option>
-                  <option value="CHALSHA">CHALSHA</option>
-                  <option value="MURTI">MURTI</option>
-                  <option value="LATAGURI">LATAGURI</option>
-                  <option value="KRANTI">KRANTI</option>
-                  <option value="KALIMPONG">KALIMPONG</option>
-                  <option value="DARJEELING">DARJEELING</option>
-                  <option value="LAVA">LAVA</option>
-                  <option value="CHUIKHIM">CHUIKHIM</option>
-                  <option value="RESOP">RESOP</option>
-                  <option value="LOLEGAON">LOLEGAON</option>
-                  <option value="SAMSING">SAMSING</option>
-                  <option value="JHALONG">JHALONG</option>
-                  <option value="CHILAPATA">CHILAPATA</option>
-                  <option value="BELAKOBA">BELAKOBA</option>
-                  <option value="SHALBARI">SHALBARI</option>
-                  <option value="MANJING">MANJING</option>
-                  <option value="JHANDI">JHANDI</option>
-                  <option value="NOKDARA">NOKDARA</option>
-                  <option value="SAMTHAR">SAMTHAR</option>
-                  <option value="PUBUNG">PUBUNG</option>
-                  <option value="PANBU">PANBU</option>
-                  <option value="CHARKHOL">CHARKHOL</option>
-                  <option value="SINGJEE">SINGJEE</option>
-                  <option value="GAJOLDOBA">GAJOLDOBA</option>
-                  <option value="SILIGURI">SILIGURI</option>
-                  <option value="MIRIK">MIRIK</option>
-                  <option value="NAXALBARI">NAXALBARI</option>
-                  <option value="MATIGARA">MATIGARA</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+                <label>Location (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-c-location"></div>
                 <input type="text" id="c-location-other" class="hidden other-input" placeholder="Specify Other Location">
               </div>
 
@@ -371,7 +285,7 @@
               </div>
 
               <div class="form-group">
-                <label>Client Status</label>
+                <label>Status</label>
                 <select id="c-status">
                   <option value="New">New</option>
                   <option value="Interested">Interested</option>
@@ -398,9 +312,7 @@
         </div>
       </div>
 
-      <!-- ========================================== -->
-      <!-- VIEW 3: PROPERTIES LIST & FORM -->
-      <!-- ========================================== -->
+      <!-- VIEW 3: PROPERTIES LIST -->
       <section id="view-properties" class="app-view">
         <div class="view-header-bar">
           <h2><i class="fa-solid fa-house"></i> Property Listings</h2>
@@ -434,14 +346,12 @@
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="properties-tbody">
-              <!-- Dynamically Populated -->
-            </tbody>
+            <tbody id="properties-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <!-- PROPERTY FORM MODAL -->
+      <!-- ADD/EDIT PROPERTY FORM MODAL -->
       <div id="modal-property-form" class="modal hidden">
         <div class="modal-content modal-large">
           <div class="modal-header">
@@ -468,57 +378,21 @@
               </div>
 
               <div class="form-group">
-                <label>Phone Number *</label>
+                <label>Phone *</label>
                 <input type="text" id="p-phone" required placeholder="Phone Contact">
               </div>
 
-              <div class="form-group">
-                <label>Intended Use (Select Multiple)</label>
-                <select id="p-intended" multiple class="multi-select">
-                  <option value="RESIDENT">RESIDENT</option>
-                  <option value="FARMHOUSE">FARMHOUSE</option>
-                  <option value="SECOND HOME">SECOND HOME</option>
-                  <option value="INVESTMENT">INVESTMENT</option>
-                  <option value="HOUSHING PROJECT">HOUSHING PROJECT</option>
-                  <option value="RESORT">RESORT</option>
-                  <option value="HOMESTAY">HOMESTAY</option>
-                  <option value="HOTEL">HOTEL</option>
-                  <option value="RESTURENT">RESTURENT</option>
-                  <option value="FACTORY">FACTORY</option>
-                  <option value="FARMING">FARMING</option>
-                  <option value="TEA PLANTATION">TEA PLANTATION</option>
-                  <option value="POULTRY FARMING">POULTRY FARMING</option>
-                  <option value="HATACHERY">HATACHERY</option>
-                  <option value="AYURVEDA">AYURVEDA</option>
-                  <option value="FISHARY">FISHARY</option>
-                  <option value="SCHOOL">SCHOOL</option>
-                  <option value="HOSPITAL">HOSPITAL</option>
-                  <option value="ASHRAM">ASHRAM</option>
-                  <option value="AGRICULTURE">AGRICULTURE</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+              <!-- Property Intended Use Grid Chart -->
+              <div class="form-group full-width">
+                <label>Intended Use (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-p-intended"></div>
                 <input type="text" id="p-intended-other" class="hidden other-input" placeholder="Specify Other Intended Use">
               </div>
 
-              <div class="form-group">
-                <label>Specialty (Select Multiple)</label>
-                <select id="p-specialty" multiple class="multi-select">
-                  <option value="CORE HILL">CORE HILL</option>
-                  <option value="HILL VIEW">HILL VIEW</option>
-                  <option value="KJ VIEW">KJ VIEW</option>
-                  <option value="RIVER SIDE">RIVER SIDE</option>
-                  <option value="NH 17 SIDE">NH 17 SIDE</option>
-                  <option value="NH 717 SIDE">NH 717 SIDE</option>
-                  <option value="REMOTE AREA">REMOTE AREA</option>
-                  <option value="BAZAR AREA">BAZAR AREA</option>
-                  <option value="FOREST SIDE">FOREST SIDE</option>
-                  <option value="DONBOSKO AREA">DONBOSKO AREA</option>
-                  <option value="HIGH LAND">HIGH LAND</option>
-                  <option value="UP & DOWN LAND">UP & DOWN LAND</option>
-                  <option value="SWAMP LAND">SWAMP LAND</option>
-                  <option value="PADDY FIELD">PADDY FIELD</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+              <!-- Property Specialty Grid Chart -->
+              <div class="form-group full-width">
+                <label>Specialty (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-p-specialty"></div>
                 <input type="text" id="p-specialty-other" class="hidden other-input" placeholder="Specify Other Specialty">
               </div>
 
@@ -540,51 +414,15 @@
                 </select>
               </div>
 
+              <!-- Property Location Grid Chart -->
               <div class="form-group full-width">
-                <label>Location (Select Multiple)</label>
-                <select id="p-location" multiple class="multi-select">
-                  <option value="OODLABARI">OODLABARI</option>
-                  <option value="DON BOSKO">DON BOSKO</option>
-                  <option value="TURIBARI">TURIBARI</option>
-                  <option value="MANABARI">MANABARI</option>
-                  <option value="P DAMDIM">P DAMDIM</option>
-                  <option value="MALBAZAR">MALBAZAR</option>
-                  <option value="BORODIGHI">BORODIGHI</option>
-                  <option value="CHALSHA">CHALSHA</option>
-                  <option value="MURTI">MURTI</option>
-                  <option value="LATAGURI">LATAGURI</option>
-                  <option value="KRANTI">KRANTI</option>
-                  <option value="KALIMPONG">KALIMPONG</option>
-                  <option value="DARJEELING">DARJEELING</option>
-                  <option value="LAVA">LAVA</option>
-                  <option value="CHUIKHIM">CHUIKHIM</option>
-                  <option value="RESOP">RESOP</option>
-                  <option value="LOLEGAON">LOLEGAON</option>
-                  <option value="SAMSING">SAMSING</option>
-                  <option value="JHALONG">JHALONG</option>
-                  <option value="CHILAPATA">CHILAPATA</option>
-                  <option value="BELAKOBA">BELAKOBA</option>
-                  <option value="SHALBARI">SHALBARI</option>
-                  <option value="MANJING">MANJING</option>
-                  <option value="JHANDI">JHANDI</option>
-                  <option value="NOKDARA">NOKDARA</option>
-                  <option value="SAMTHAR">SAMTHAR</option>
-                  <option value="PUBUNG">PUBUNG</option>
-                  <option value="PANBU">PANBU</option>
-                  <option value="CHARKHOL">CHARKHOL</option>
-                  <option value="SINGJEE">SINGJEE</option>
-                  <option value="GAJOLDOBA">GAJOLDOBA</option>
-                  <option value="SILIGURI">SILIGURI</option>
-                  <option value="MIRIK">MIRIK</option>
-                  <option value="NAXALBARI">NAXALBARI</option>
-                  <option value="MATIGARA">MATIGARA</option>
-                  <option value="OTHERS">OTHERS</option>
-                </select>
+                <label>Location (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-p-location"></div>
                 <input type="text" id="p-location-other" class="hidden other-input" placeholder="Specify Other Location">
               </div>
 
               <div class="form-group">
-                <label>Plot Size</label>
+                <label>Size</label>
                 <input type="number" step="any" id="p-size">
               </div>
 
@@ -624,19 +462,13 @@
 
               <div class="form-group full-width">
                 <label>Address Of Property</label>
-                <input type="text" id="p-address" placeholder="Exact plot location details">
+                <input type="text" id="p-address" placeholder="Exact plot address">
               </div>
 
-              <div class="form-group">
-                <label>Owner Details Available</label>
-                <select id="p-owner-details" multiple class="multi-select">
-                  <option value="MOBILE NO">MOBILE NO</option>
-                  <option value="ROR PORCHA">ROR PORCHA</option>
-                  <option value="DEEDS">DEEDS</option>
-                  <option value="SITE PLAN">SITE PLAN</option>
-                  <option value="RESIDENT ADDRESS">RESIDENT ADDRESS</option>
-                  <option value="LEGAL HEIR">LEGAL HEIR</option>
-                </select>
+              <!-- Owner Details Grid Chart -->
+              <div class="form-group full-width">
+                <label>Owner Details (Select Choice from Chart)</label>
+                <div class="option-grid-container" id="chart-p-owner-details"></div>
               </div>
 
               <div class="form-group">
@@ -646,17 +478,17 @@
 
               <div class="form-group">
                 <label>Water Infra</label>
-                <input type="text" id="p-water" placeholder="e.g. Boring / Municipal">
+                <input type="text" id="p-water" placeholder="e.g. Boring Line">
               </div>
 
               <div class="form-group">
                 <label>Electricity Infra</label>
-                <input type="text" id="p-electricity" placeholder="e.g. 3 Phase Line">
+                <input type="text" id="p-electricity" placeholder="e.g. 3 Phase">
               </div>
 
               <div class="form-group full-width">
                 <label>Dispute Details</label>
-                <textarea id="p-dispute" rows="2" placeholder="Clear title or legal notes"></textarea>
+                <textarea id="p-dispute" rows="2" placeholder="Dispute details"></textarea>
               </div>
 
               <div class="form-group">
@@ -668,7 +500,7 @@
               </div>
 
               <div class="form-group">
-                <label>Google Location Available</label>
+                <label>Google Location</label>
                 <select id="p-google-loc">
                   <option value="No">No</option>
                   <option value="Yes">Yes</option>
@@ -708,9 +540,7 @@
         </div>
       </div>
 
-      <!-- ========================================== -->
       <!-- VIEW 4: TASK LIST & FORM -->
-      <!-- ========================================== -->
       <section id="view-tasks" class="app-view">
         <div class="view-header-bar">
           <h2><i class="fa-solid fa-clipboard-list"></i> Task Management</h2>
@@ -730,14 +560,12 @@
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="tasks-tbody">
-              <!-- Dynamically Populated -->
-            </tbody>
+            <tbody id="tasks-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <!-- TASK FORM MODAL -->
+      <!-- ADD/EDIT TASK FORM MODAL -->
       <div id="modal-task-form" class="modal hidden">
         <div class="modal-content">
           <div class="modal-header">
@@ -759,7 +587,7 @@
               </div>
 
               <div class="form-group full-width">
-                <label>Task Description *</label>
+                <label>Task *</label>
                 <input type="text" id="t-task" required placeholder="What needs to be done?">
               </div>
 
@@ -811,9 +639,7 @@
         </div>
       </div>
 
-      <!-- ========================================== -->
-      <!-- VIEW 5: FOLLOW-UPS LIST -->
-      <!-- ========================================== -->
+      <!-- VIEW 5: FOLLOW-UPS -->
       <section id="view-followups" class="app-view">
         <div class="view-header-bar">
           <h2><i class="fa-solid fa-calendar-check"></i> Follow-up Pipeline</h2>
@@ -837,9 +663,7 @@
         </div>
       </section>
 
-      <!-- ========================================== -->
-      <!-- MATCHMAKER MODAL SYSTEM -->
-      <!-- ========================================== -->
+      <!-- MATCHMAKER MODAL -->
       <div id="modal-matchmaker" class="modal hidden">
         <div class="modal-content modal-large">
           <div class="modal-header">
@@ -867,9 +691,7 @@
 
     </main>
 
-    <!-- ========================================== -->
-    <!-- BOTTOM NAVIGATION (Matching DASHBOARD F.jpg) -->
-    <!-- ========================================== -->
+    <!-- BOTTOM NAVIGATION BAR (DASHBOARD F.jpg) -->
     <nav class="bottom-nav">
       <button class="nav-item active" onclick="navigateTo('view-dashboard')">
         <div class="nav-icon-box bg-dark"><i class="fa-solid fa-border-all"></i></div>
