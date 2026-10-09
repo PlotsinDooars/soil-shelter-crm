@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>SOIL & SHELTER CRM</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+  <div id="app-container">
+
+    <!-- Sync & User Status Header -->
+    <div class="top-bar">
+      <div class="user-badge"><i class="fa-solid fa-user-shield"></i> <span id="user-email-display">Loading...</span></div>
+      <div class="sync-indicator">
+        <span class="status-dot green"></span> Synced: <span id="last-synced-time">--:--</span>
+        <button class="btn-refresh-icon" onclick="refreshCurrentView()"><i class="fa-solid fa-rotate"></i></button>
+      </div>
+    </div>
+
+    <!-- MAIN APP HEADER (Matching DASHBOARD F.jpg) -->
+    <header class="company-header">
+      <div class="header-side header-left">BIKASH DEB ROY</div>
+      <div class="header-center">
+        <h1 class="brand-title">SOIL & SHELTER</h1>
+        <div class="brand-subtitle">your complete property consultant</div>
+      </div>
+      <div class="header-side header-right">MD ANWAR HOSSAIN</div>
+    </header>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+      <div class="spinner"></div>
+      <div id="loading-text">Communicating with Google Sheets...</div>
+    </div>
+
+    <!-- NOTIFICATION BAR -->
+    <div id="toast-message" class="toast hidden"></div>
+
+    <!-- MAIN CONTENT CONTAINERS -->
+    <main id="main-content">
+
+      <!-- ========================================== -->
+      <!-- VIEW 1: DASHBOARD (Matching DASHBOARD F.jpg) -->
+      <!-- ========================================== -->
+      <section id="view-dashboard" class="app-view active">
+        
+        <!-- Live Summary Cards -->
+        <div class="summary-cards-grid">
+          <div class="card card-blue" onclick="navigateTo('view-clients')">
+            <div class="card-icon"><i class="fa-solid fa-users"></i></div>
+            <div class="card-info">
+              <div class="card-title">Total Clients</div>
+              <div class="card-value" id="dash-total-clients">0</div>
+              <div class="card-subtext"><i class="fa-solid fa-arrow-up"></i> Live Count</div>
+            </div>
+          </div>
+
+          <div class="card card-green" onclick="navigateTo('view-properties')">
+            <div class="card-icon"><i class="fa-solid fa-house"></i></div>
+            <div class="card-info">
+              <div class="card-title">Total Properties</div>
+              <div class="card-value" id="dash-total-properties">0</div>
+              <div class="card-subtext"><i class="fa-solid fa-arrow-up"></i> Active Listings</div>
+            </div>
+          </div>
+
+          <div class="card card-orange" onclick="navigateTo('view-tasks')">
+            <div class="card-icon"><i class="fa-solid fa-clipboard-list"></i></div>
+            <div class="card-info">
+              <div class="card-title">Total Task List</div>
+              <div class="card-value" id="dash-total-tasks">0</div>
+              <div class="card-subtext"><i class="fa-solid fa-list-check"></i> Tasks Logged</div>
+            </div>
+          </div>
+
+          <div class="card card-purple" onclick="navigateTo('view-followups')">
+            <div class="card-icon"><i class="fa-solid fa-calendar-check"></i></div>
+            <div class="card-info">
+              <div class="card-title">Follow-ups Due</div>
+              <div class="card-value" id="dash-followups-due">0</div>
+              <div class="card-subtext" id="dash-overdue-subtext"><i class="fa-solid fa-triangle-exclamation"></i> 0 Overdue</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 Large Pastel Action Buttons -->
+        <div class="shortcut-buttons-grid">
+          <button class="btn-shortcut btn-pastel-blue" onclick="openAddClientForm()">
+            <div class="shortcut-icon-box"><i class="fa-solid fa-users"></i><i class="fa-solid fa-plus icon-sub"></i></div>
+            <div class="shortcut-label">ADD CLIENTS</div>
+          </button>
+
+          <button class="btn-shortcut btn-pastel-pink" onclick="openAddTaskForm()">
+            <div class="shortcut-icon-box"><i class="fa-solid fa-clipboard-check"></i><i class="fa-solid fa-plus icon-sub"></i></div>
+            <div class="shortcut-label">ADD TASK</div>
+          </button>
+
+          <button class="btn-shortcut btn-pastel-green" onclick="openAddPropertyForm()">
+            <div class="shortcut-icon-box"><i class="fa-solid fa-house"></i><i class="fa-solid fa-plus icon-sub"></i></div>
+            <div class="shortcut-label">ADD PROPERTY</div>
+          </button>
+        </div>
+
+        <!-- 2 Matchmaker Buttons -->
+        <div class="matchmaker-buttons-grid">
+          <button class="btn-matchmaker btn-match-green" onclick="openMatchmakerModal('property')">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <span>MATCH MAKER BY PROPERTY</span>
+          </button>
+
+          <button class="btn-matchmaker btn-match-blue" onclick="openMatchmakerModal('client')">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <span>MATCH MAKER BY CLIENT</span>
+          </button>
+        </div>
+
+        <!-- Today's Task List Panel -->
+        <div class="todays-task-panel">
+          <div class="panel-left-title">
+            <div>TODAY'S</div>
+            <div>TASK LIST</div>
+          </div>
+          <div class="panel-right-content">
+            <ol id="todays-task-ol" class="task-numbered-list">
+              <li>Loading today's scheduled tasks...</li>
+            </ol>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========================================== -->
+      <!-- VIEW 2: CLIENTS LIST & FORM -->
+      <!-- ========================================== -->
+      <section id="view-clients" class="app-view">
+        <div class="view-header-bar">
+          <h2><i class="fa-solid fa-users"></i> Client Records</h2>
+          <button class="btn-primary" onclick="openAddClientForm()"><i class="fa-solid fa-plus"></i> Add New Client</button>
+        </div>
+
+        <!-- Search & Filter Controls -->
+        <div class="filter-card">
+          <div class="filter-row">
+            <input type="text" id="client-search" placeholder="Search by ID, Name, Phone, Location, Intended Use..." onkeyup="filterClientsTable()">
+            <select id="client-filter-status" onchange="filterClientsTable()">
+              <option value="">All Statuses</option>
+              <option value="New">New</option>
+              <option value="Interested">Interested</option>
+              <option value="Not Interested">Not Interested</option>
+              <option value="Final">Final</option>
+              <option value="Follow up">Follow up</option>
+              <option value="Converted">Converted</option>
+              <option value="Close Deal">Close Deal</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="clients-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name / Phone</th>
+                <th>Intended Use / Specialty</th>
+                <th>Location</th>
+                <th>Budget Range</th>
+                <th>Next Follow Up</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="clients-tbody">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CLIENT FORM MODAL -->
+      <div id="modal-client-form" class="modal hidden">
+        <div class="modal-content modal-large">
+          <div class="modal-header">
+            <h3 id="client-form-title">+ ADD CLIENT</h3>
+            <span class="close-btn" onclick="closeModal('modal-client-form')">&times;</span>
+          </div>
+          <form id="form-client" onsubmit="handleClientSubmit(event)">
+            <input type="hidden" id="c-id" value="">
+            
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Client ID (Auto Generated)</label>
+                <input type="text" id="c-display-id" readonly placeholder="Auto ID">
+              </div>
+
+              <div class="form-group">
+                <label>Date *</label>
+                <input type="date" id="c-date" required>
+              </div>
+
+              <div class="form-group">
+                <label>Client Name *</label>
+                <input type="text" id="c-name" required placeholder="Full Name">
+              </div>
+
+              <div class="form-group">
+                <label>Phone Number *</label>
+                <input type="text" id="c-phone" required placeholder="e.g. +91 9876543210">
+              </div>
+
+              <div class="form-group full-width">
+                <label>Address</label>
+                <textarea id="c-address" rows="2" placeholder="Residential/Business address"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Intended Use (Select Multiple)</label>
+                <select id="c-intended" multiple class="multi-select">
+                  <option value="RESIDENT">RESIDENT</option>
+                  <option value="FARMHOUSE">FARMHOUSE</option>
+                  <option value="SECOND HOME">SECOND HOME</option>
+                  <option value="INVESTMENT">INVESTMENT</option>
+                  <option value="HOUSHING PROJECT">HOUSHING PROJECT</option>
+                  <option value="RESORT">RESORT</option>
+                  <option value="HOMESTAY">HOMESTAY</option>
+                  <option value="HOTEL">HOTEL</option>
+                  <option value="RESTURENT">RESTURENT</option>
+                  <option value="FACTORY">FACTORY</option>
+                  <option value="FARMING">FARMING</option>
+                  <option value="TEA PLANTATION">TEA PLANTATION</option>
+                  <option value="POULTRY FARMING">POULTRY FARMING</option>
+                  <option value="HATACHERY">HATACHERY</option>
+                  <option value="AYURVEDA">AYURVEDA</option>
+                  <option value="FISHARY">FISHARY</option>
+                  <option value="SCHOOL">SCHOOL</option>
+                  <option value="HOSPITAL">HOSPITAL</option>
+                  <option value="ASHRAM">ASHRAM</option>
+                  <option value="AGRICULTURE">AGRICULTURE</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="c-intended-other" class="hidden other-input" placeholder="Specify Other Intended Use">
+              </div>
+
+              <div class="form-group">
+                <label>Specialty (Select Multiple)</label>
+                <select id="c-specialty" multiple class="multi-select">
+                  <option value="CORE HILL">CORE HILL</option>
+                  <option value="HILL VIEW">HILL VIEW</option>
+                  <option value="KJ VIEW">KJ VIEW</option>
+                  <option value="RIVER SIDE">RIVER SIDE</option>
+                  <option value="NH 17 SIDE">NH 17 SIDE</option>
+                  <option value="NH 717 SIDE">NH 717 SIDE</option>
+                  <option value="REMOTE AREA">REMOTE AREA</option>
+                  <option value="BAZAR AREA">BAZAR AREA</option>
+                  <option value="FOREST SIDE">FOREST SIDE</option>
+                  <option value="DONBOSKO AREA">DONBOSKO AREA</option>
+                  <option value="HIGH LAND">HIGH LAND</option>
+                  <option value="UP & DOWN LAND">UP & DOWN LAND</option>
+                  <option value="SWAMP LAND">SWAMP LAND</option>
+                  <option value="PADDY FIELD">PADDY FIELD</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="c-specialty-other" class="hidden other-input" placeholder="Specify Other Specialty">
+              </div>
+
+              <div class="form-group">
+                <label>Area Category</label>
+                <select id="c-area-category">
+                  <option value="PLAIN AREA">PLAIN AREA</option>
+                  <option value="HILLS AREA">HILLS AREA</option>
+                  <option value="BOTH AREA">BOTH AREA</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Owner Category</label>
+                <select id="c-owner-category">
+                  <option value="GENERAL">GENERAL</option>
+                  <option value="TRIBEL">TRIBEL</option>
+                  <option value="BOTH">BOTH</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Preferred Locations (Select Multiple)</label>
+                <select id="c-location" multiple class="multi-select">
+                  <option value="NOT SPECIFIC">NOT SPECIFIC</option>
+                  <option value="OODLABARI">OODLABARI</option>
+                  <option value="DON BOSKO">DON BOSKO</option>
+                  <option value="TURIBARI">TURIBARI</option>
+                  <option value="MANABARI">MANABARI</option>
+                  <option value="P DAMDIM">P DAMDIM</option>
+                  <option value="MALBAZAR">MALBAZAR</option>
+                  <option value="BORODIGHI">BORODIGHI</option>
+                  <option value="CHALSHA">CHALSHA</option>
+                  <option value="MURTI">MURTI</option>
+                  <option value="LATAGURI">LATAGURI</option>
+                  <option value="KRANTI">KRANTI</option>
+                  <option value="KALIMPONG">KALIMPONG</option>
+                  <option value="DARJEELING">DARJEELING</option>
+                  <option value="LAVA">LAVA</option>
+                  <option value="CHUIKHIM">CHUIKHIM</option>
+                  <option value="RESOP">RESOP</option>
+                  <option value="LOLEGAON">LOLEGAON</option>
+                  <option value="SAMSING">SAMSING</option>
+                  <option value="JHALONG">JHALONG</option>
+                  <option value="CHILAPATA">CHILAPATA</option>
+                  <option value="BELAKOBA">BELAKOBA</option>
+                  <option value="SHALBARI">SHALBARI</option>
+                  <option value="MANJING">MANJING</option>
+                  <option value="JHANDI">JHANDI</option>
+                  <option value="NOKDARA">NOKDARA</option>
+                  <option value="SAMTHAR">SAMTHAR</option>
+                  <option value="PUBUNG">PUBUNG</option>
+                  <option value="PANBU">PANBU</option>
+                  <option value="CHARKHOL">CHARKHOL</option>
+                  <option value="SINGJEE">SINGJEE</option>
+                  <option value="GAJOLDOBA">GAJOLDOBA</option>
+                  <option value="SILIGURI">SILIGURI</option>
+                  <option value="MIRIK">MIRIK</option>
+                  <option value="NAXALBARI">NAXALBARI</option>
+                  <option value="MATIGARA">MATIGARA</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="c-location-other" class="hidden other-input" placeholder="Specify Other Location">
+              </div>
+
+              <div class="form-group">
+                <label>Min Size</label>
+                <input type="number" step="any" id="c-min-size">
+              </div>
+
+              <div class="form-group">
+                <label>Max Size</label>
+                <input type="number" step="any" id="c-max-size">
+              </div>
+
+              <div class="form-group">
+                <label>Size Unit</label>
+                <select id="c-size-unit">
+                  <option value="Decimal">Decimal</option>
+                  <option value="Acre">Acre</option>
+                  <option value="Katha">Katha</option>
+                  <option value="Bigha">Bigha</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Min Budget</label>
+                <input type="number" step="any" id="c-min-budget">
+              </div>
+
+              <div class="form-group">
+                <label>Max Budget</label>
+                <input type="number" step="any" id="c-max-budget">
+              </div>
+
+              <div class="form-group">
+                <label>Budget Unit</label>
+                <select id="c-budget-unit">
+                  <option value="Thousand">Thousand</option>
+                  <option value="Lakh">Lakh</option>
+                  <option value="Crore">Crore</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Next Follow Up</label>
+                <input type="date" id="c-next-followup">
+              </div>
+
+              <div class="form-group">
+                <label>Client Status</label>
+                <select id="c-status">
+                  <option value="New">New</option>
+                  <option value="Interested">Interested</option>
+                  <option value="Not Interested">Not Interested</option>
+                  <option value="Final">Final</option>
+                  <option value="Follow up">Follow up</option>
+                  <option value="Converted">Converted</option>
+                  <option value="Close Deal">Close Deal</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Remarks</label>
+                <textarea id="c-remarks" rows="2"></textarea>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Client</button>
+              <button type="button" class="btn-secondary" onclick="saveAndAddAnotherClient()"><i class="fa-solid fa-plus"></i> Save & Add Another</button>
+              <button type="button" class="btn-cancel" onclick="closeModal('modal-client-form')">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- VIEW 3: PROPERTIES LIST & FORM -->
+      <!-- ========================================== -->
+      <section id="view-properties" class="app-view">
+        <div class="view-header-bar">
+          <h2><i class="fa-solid fa-house"></i> Property Listings</h2>
+          <button class="btn-primary" onclick="openAddPropertyForm()"><i class="fa-solid fa-plus"></i> Add New Property</button>
+        </div>
+
+        <div class="filter-card">
+          <div class="filter-row">
+            <input type="text" id="prop-search" placeholder="Search by Property ID, Key Man, Location, Address..." onkeyup="filterPropertiesTable()">
+            <select id="prop-filter-status" onchange="filterPropertiesTable()">
+              <option value="">All Availability</option>
+              <option value="AVAILABLE">AVAILABLE</option>
+              <option value="SOLD">SOLD</option>
+              <option value="HOLD">HOLD</option>
+              <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="properties-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Key Man / Phone</th>
+                <th>Intended Use / Specialty</th>
+                <th>Location & Address</th>
+                <th>Size</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="properties-tbody">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PROPERTY FORM MODAL -->
+      <div id="modal-property-form" class="modal hidden">
+        <div class="modal-content modal-large">
+          <div class="modal-header">
+            <h3 id="property-form-title">+ ADD PROPERTY</h3>
+            <span class="close-btn" onclick="closeModal('modal-property-form')">&times;</span>
+          </div>
+          <form id="form-property" onsubmit="handlePropertySubmit(event)">
+            <input type="hidden" id="p-id" value="">
+            
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Property ID (Auto Generated)</label>
+                <input type="text" id="p-display-id" readonly placeholder="Auto ID">
+              </div>
+
+              <div class="form-group">
+                <label>Date Listed *</label>
+                <input type="date" id="p-date" required>
+              </div>
+
+              <div class="form-group">
+                <label>Key Man *</label>
+                <input type="text" id="p-keyman" required placeholder="Contact Person">
+              </div>
+
+              <div class="form-group">
+                <label>Phone Number *</label>
+                <input type="text" id="p-phone" required placeholder="Phone Contact">
+              </div>
+
+              <div class="form-group">
+                <label>Intended Use (Select Multiple)</label>
+                <select id="p-intended" multiple class="multi-select">
+                  <option value="RESIDENT">RESIDENT</option>
+                  <option value="FARMHOUSE">FARMHOUSE</option>
+                  <option value="SECOND HOME">SECOND HOME</option>
+                  <option value="INVESTMENT">INVESTMENT</option>
+                  <option value="HOUSHING PROJECT">HOUSHING PROJECT</option>
+                  <option value="RESORT">RESORT</option>
+                  <option value="HOMESTAY">HOMESTAY</option>
+                  <option value="HOTEL">HOTEL</option>
+                  <option value="RESTURENT">RESTURENT</option>
+                  <option value="FACTORY">FACTORY</option>
+                  <option value="FARMING">FARMING</option>
+                  <option value="TEA PLANTATION">TEA PLANTATION</option>
+                  <option value="POULTRY FARMING">POULTRY FARMING</option>
+                  <option value="HATACHERY">HATACHERY</option>
+                  <option value="AYURVEDA">AYURVEDA</option>
+                  <option value="FISHARY">FISHARY</option>
+                  <option value="SCHOOL">SCHOOL</option>
+                  <option value="HOSPITAL">HOSPITAL</option>
+                  <option value="ASHRAM">ASHRAM</option>
+                  <option value="AGRICULTURE">AGRICULTURE</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="p-intended-other" class="hidden other-input" placeholder="Specify Other Intended Use">
+              </div>
+
+              <div class="form-group">
+                <label>Specialty (Select Multiple)</label>
+                <select id="p-specialty" multiple class="multi-select">
+                  <option value="CORE HILL">CORE HILL</option>
+                  <option value="HILL VIEW">HILL VIEW</option>
+                  <option value="KJ VIEW">KJ VIEW</option>
+                  <option value="RIVER SIDE">RIVER SIDE</option>
+                  <option value="NH 17 SIDE">NH 17 SIDE</option>
+                  <option value="NH 717 SIDE">NH 717 SIDE</option>
+                  <option value="REMOTE AREA">REMOTE AREA</option>
+                  <option value="BAZAR AREA">BAZAR AREA</option>
+                  <option value="FOREST SIDE">FOREST SIDE</option>
+                  <option value="DONBOSKO AREA">DONBOSKO AREA</option>
+                  <option value="HIGH LAND">HIGH LAND</option>
+                  <option value="UP & DOWN LAND">UP & DOWN LAND</option>
+                  <option value="SWAMP LAND">SWAMP LAND</option>
+                  <option value="PADDY FIELD">PADDY FIELD</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="p-specialty-other" class="hidden other-input" placeholder="Specify Other Specialty">
+              </div>
+
+              <div class="form-group">
+                <label>Area Category</label>
+                <select id="p-area-category">
+                  <option value="PLAIN AREA">PLAIN AREA</option>
+                  <option value="HILLS AREA">HILLS AREA</option>
+                  <option value="BOTH AREA">BOTH AREA</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Owner Category</label>
+                <select id="p-owner-category">
+                  <option value="GENERAL">GENERAL</option>
+                  <option value="TRIBEL">TRIBEL</option>
+                  <option value="BOTH">BOTH</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Location (Select Multiple)</label>
+                <select id="p-location" multiple class="multi-select">
+                  <option value="OODLABARI">OODLABARI</option>
+                  <option value="DON BOSKO">DON BOSKO</option>
+                  <option value="TURIBARI">TURIBARI</option>
+                  <option value="MANABARI">MANABARI</option>
+                  <option value="P DAMDIM">P DAMDIM</option>
+                  <option value="MALBAZAR">MALBAZAR</option>
+                  <option value="BORODIGHI">BORODIGHI</option>
+                  <option value="CHALSHA">CHALSHA</option>
+                  <option value="MURTI">MURTI</option>
+                  <option value="LATAGURI">LATAGURI</option>
+                  <option value="KRANTI">KRANTI</option>
+                  <option value="KALIMPONG">KALIMPONG</option>
+                  <option value="DARJEELING">DARJEELING</option>
+                  <option value="LAVA">LAVA</option>
+                  <option value="CHUIKHIM">CHUIKHIM</option>
+                  <option value="RESOP">RESOP</option>
+                  <option value="LOLEGAON">LOLEGAON</option>
+                  <option value="SAMSING">SAMSING</option>
+                  <option value="JHALONG">JHALONG</option>
+                  <option value="CHILAPATA">CHILAPATA</option>
+                  <option value="BELAKOBA">BELAKOBA</option>
+                  <option value="SHALBARI">SHALBARI</option>
+                  <option value="MANJING">MANJING</option>
+                  <option value="JHANDI">JHANDI</option>
+                  <option value="NOKDARA">NOKDARA</option>
+                  <option value="SAMTHAR">SAMTHAR</option>
+                  <option value="PUBUNG">PUBUNG</option>
+                  <option value="PANBU">PANBU</option>
+                  <option value="CHARKHOL">CHARKHOL</option>
+                  <option value="SINGJEE">SINGJEE</option>
+                  <option value="GAJOLDOBA">GAJOLDOBA</option>
+                  <option value="SILIGURI">SILIGURI</option>
+                  <option value="MIRIK">MIRIK</option>
+                  <option value="NAXALBARI">NAXALBARI</option>
+                  <option value="MATIGARA">MATIGARA</option>
+                  <option value="OTHERS">OTHERS</option>
+                </select>
+                <input type="text" id="p-location-other" class="hidden other-input" placeholder="Specify Other Location">
+              </div>
+
+              <div class="form-group">
+                <label>Plot Size</label>
+                <input type="number" step="any" id="p-size">
+              </div>
+
+              <div class="form-group">
+                <label>Size Unit</label>
+                <select id="p-size-unit">
+                  <option value="Decimal">Decimal</option>
+                  <option value="Acre">Acre</option>
+                  <option value="Katha">Katha</option>
+                  <option value="Bigha">Bigha</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Price</label>
+                <input type="number" step="any" id="p-price">
+              </div>
+
+              <div class="form-group">
+                <label>Price Unit</label>
+                <select id="p-price-unit">
+                  <option value="Thousand">Thousand</option>
+                  <option value="Lakh">Lakh</option>
+                  <option value="Crore">Crore</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Price / Plot Unit</label>
+                <select id="p-price-plot-unit">
+                  <option value="Decimal">Decimal</option>
+                  <option value="Acre">Acre</option>
+                  <option value="Katha">Katha</option>
+                  <option value="Bigha">Bigha</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Address Of Property</label>
+                <input type="text" id="p-address" placeholder="Exact plot location details">
+              </div>
+
+              <div class="form-group">
+                <label>Owner Details Available</label>
+                <select id="p-owner-details" multiple class="multi-select">
+                  <option value="MOBILE NO">MOBILE NO</option>
+                  <option value="ROR PORCHA">ROR PORCHA</option>
+                  <option value="DEEDS">DEEDS</option>
+                  <option value="SITE PLAN">SITE PLAN</option>
+                  <option value="RESIDENT ADDRESS">RESIDENT ADDRESS</option>
+                  <option value="LEGAL HEIR">LEGAL HEIR</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Road Infra</label>
+                <input type="text" id="p-road" placeholder="e.g. 20 ft Pitch Road">
+              </div>
+
+              <div class="form-group">
+                <label>Water Infra</label>
+                <input type="text" id="p-water" placeholder="e.g. Boring / Municipal">
+              </div>
+
+              <div class="form-group">
+                <label>Electricity Infra</label>
+                <input type="text" id="p-electricity" placeholder="e.g. 3 Phase Line">
+              </div>
+
+              <div class="form-group full-width">
+                <label>Dispute Details</label>
+                <textarea id="p-dispute" rows="2" placeholder="Clear title or legal notes"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Media Taken</label>
+                <select id="p-media">
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Google Location Available</label>
+                <select id="p-google-loc">
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Verified</label>
+                <select id="p-verified">
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Available Status</label>
+                <select id="p-status">
+                  <option value="AVAILABLE">AVAILABLE</option>
+                  <option value="SOLD">SOLD</option>
+                  <option value="HOLD">HOLD</option>
+                  <option value="UNKNOWN">UNKNOWN</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Remarks</label>
+                <textarea id="p-remarks" rows="2"></textarea>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Property</button>
+              <button type="button" class="btn-secondary" onclick="saveAndAddAnotherProperty()"><i class="fa-solid fa-plus"></i> Save & Add Another</button>
+              <button type="button" class="btn-cancel" onclick="closeModal('modal-property-form')">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- VIEW 4: TASK LIST & FORM -->
+      <!-- ========================================== -->
+      <section id="view-tasks" class="app-view">
+        <div class="view-header-bar">
+          <h2><i class="fa-solid fa-clipboard-list"></i> Task Management</h2>
+          <button class="btn-primary" onclick="openAddTaskForm()"><i class="fa-solid fa-plus"></i> Add New Task</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>Task Description</th>
+                <th>Task Type</th>
+                <th>Place</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tasks-tbody">
+              <!-- Dynamically Populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TASK FORM MODAL -->
+      <div id="modal-task-form" class="modal hidden">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="task-form-title">+ ADD TASK</h3>
+            <span class="close-btn" onclick="closeModal('modal-task-form')">&times;</span>
+          </div>
+          <form id="form-task" onsubmit="handleTaskSubmit(event)">
+            <input type="hidden" id="t-row-index" value="">
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Date *</label>
+                <input type="date" id="t-date" required>
+              </div>
+
+              <div class="form-group">
+                <label>Time</label>
+                <input type="text" id="t-time" placeholder="e.g. 10:30 AM / 2 PM">
+              </div>
+
+              <div class="form-group full-width">
+                <label>Task Description *</label>
+                <input type="text" id="t-task" required placeholder="What needs to be done?">
+              </div>
+
+              <div class="form-group">
+                <label>Task Type</label>
+                <select id="t-type">
+                  <option value="Clients">Clients</option>
+                  <option value="Properties">Properties</option>
+                  <option value="Others">Others</option>
+                </select>
+                <input type="text" id="t-type-other" class="hidden other-input" placeholder="Specify Other Task Type">
+              </div>
+
+              <div class="form-group">
+                <label>Place</label>
+                <input type="text" id="t-place" placeholder="Meeting / Site location">
+              </div>
+
+              <div class="form-group">
+                <label>Who Attend</label>
+                <select id="t-who">
+                  <option value="Bikash">Bikash</option>
+                  <option value="Anwar">Anwar</option>
+                  <option value="Others">Others</option>
+                </select>
+                <input type="text" id="t-who-other" class="hidden other-input" placeholder="Specify Person Name">
+              </div>
+
+              <div class="form-group">
+                <label>Status</label>
+                <select id="t-status">
+                  <option value="Pending">Pending</option>
+                  <option value="Done">Done</option>
+                  <option value="Post Pond">Post Pond</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label>Remarks</label>
+                <textarea id="t-remarks" rows="2"></textarea>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Task</button>
+              <button type="button" class="btn-cancel" onclick="closeModal('modal-task-form')">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- VIEW 5: FOLLOW-UPS LIST -->
+      <!-- ========================================== -->
+      <section id="view-followups" class="app-view">
+        <div class="view-header-bar">
+          <h2><i class="fa-solid fa-calendar-check"></i> Follow-up Pipeline</h2>
+        </div>
+
+        <div class="followup-sections">
+          <div class="followup-card-group group-overdue">
+            <h3 class="group-title text-danger"><i class="fa-solid fa-circle-exclamation"></i> Overdue Follow-ups</h3>
+            <div id="followup-list-overdue" class="followup-item-list"></div>
+          </div>
+
+          <div class="followup-card-group group-today">
+            <h3 class="group-title text-warning"><i class="fa-solid fa-clock"></i> Due Today</h3>
+            <div id="followup-list-today" class="followup-item-list"></div>
+          </div>
+
+          <div class="followup-card-group group-upcoming">
+            <h3 class="group-title text-success"><i class="fa-solid fa-calendar-days"></i> Upcoming Follow-ups</h3>
+            <div id="followup-list-upcoming" class="followup-item-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- MATCHMAKER MODAL SYSTEM -->
+      <!-- ========================================== -->
+      <div id="modal-matchmaker" class="modal hidden">
+        <div class="modal-content modal-large">
+          <div class="modal-header">
+            <h3 id="matchmaker-title">CRM MATCHMAKER ENGINE</h3>
+            <span class="close-btn" onclick="closeModal('modal-matchmaker')">&times;</span>
+          </div>
+
+          <div class="matchmaker-controls">
+            <div class="form-group full-width">
+              <label id="matchmaker-select-label">Select Item to Match:</label>
+              <select id="matchmaker-select-item" class="form-control" onchange="executeMatchmaking()">
+                <option value="">-- Choose Record --</option>
+              </select>
+            </div>
+            <div id="matchmaker-options" class="form-group hidden">
+              <label><input type="checkbox" id="match-include-sold" onchange="executeMatchmaking()"> Include SOLD properties in search</label>
+            </div>
+          </div>
+
+          <div id="matchmaker-results-container" class="matchmaker-results">
+            <div class="placeholder-text">Select a client or property above to calculate real-time requirement matches.</div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- BOTTOM NAVIGATION (Matching DASHBOARD F.jpg) -->
+    <!-- ========================================== -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="navigateTo('view-dashboard')">
+        <div class="nav-icon-box bg-dark"><i class="fa-solid fa-border-all"></i></div>
+        <span class="nav-label">DASHBOARD</span>
+      </button>
+
+      <button class="nav-item" onclick="navigateTo('view-clients')">
+        <div class="nav-icon-box bg-blue"><i class="fa-solid fa-users"></i></div>
+        <span class="nav-label">Clients</span>
+      </button>
+
+      <button class="nav-item" onclick="navigateTo('view-properties')">
+        <div class="nav-icon-box bg-green"><i class="fa-solid fa-house"></i></div>
+        <span class="nav-label">Properties</span>
+      </button>
+
+      <button class="nav-item" onclick="navigateTo('view-tasks')">
+        <div class="nav-icon-box bg-orange"><i class="fa-solid fa-comment-dots"></i></div>
+        <span class="nav-label">TASK</span>
+      </button>
+
+      <button class="nav-item" onclick="navigateTo('view-followups')">
+        <div class="nav-icon-box bg-purple"><i class="fa-solid fa-calendar-days"></i></div>
+        <span class="nav-label">Follow-ups</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>

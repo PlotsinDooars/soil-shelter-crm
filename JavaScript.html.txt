@@ -1,0 +1,775 @@
+<script>
+/**
+ * SOIL & SHELTER CRM — Frontend Controller Logic
+ * Manages UI interactions, real-time polling, form lifecycle, WhatsApp/Call shortcuts,
+ * and server calls via google.script.run.
+ */
+
+var state = {
+  clients: [],
+  properties: [],
+  tasks: [],
+  dashboard: {},
+  currentMatchmakerMode: 'property'
+};
+
+// Initialize Application
+document.addEventListener('DOMContentLoaded', function() {
+  fetchUserInfo();
+  refreshAllData();
+  
+  // Setup 10-second polling sync
+  setInterval(function() {
+    refreshAllData(true); // Silent background refresh
+  }, 10000);
+
+  // Setup Other choices listener
+  setupOtherInputTriggers();
+});
+
+function showLoading(text) {
+  document.getElementById('loading-text').innerText = text || 'Loading...';
+  document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast-message');
+  t.innerText = msg;
+  t.classList.remove('hidden');
+  setTimeout(function() { t.classList.add('hidden'); }, 3500);
+}
+
+function fetchUserInfo() {
+  google.script.run
+    .withSuccessHandler(function(info) {
+      document.getElementById('user-email-display').innerText = info.email;
+    })
+    .getCurrentUserInfo();
+}
+
+function refreshAllData(silent) {
+  if (!silent) showLoading('Syncing with Google Sheets...');
+  
+  google.script.run
+    .withSuccessHandler(function(dashData) {
+      state.dashboard = dashData;
+      renderDashboard();
+      document.getElementById('last-synced-time').innerText = dashData.lastSynced;
+      
+      // Fetch Detailed Lists
+      fetchListsData(silent);
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showToast('Sync Error: ' + err.message);
+    })
+    .getDashboardData();
+}
+
+function fetchListsData(silent) {
+  google.script.run.withSuccessHandler(function(clients) {
+    state.clients = clients;
+    renderClientsTable();
+    renderFollowups();
+    
+    google.script.run.withSuccessHandler(function(props) {
+      state.properties = props;
+      renderPropertiesTable();
+      
+      google.script.run.withSuccessHandler(function(tasks) {
+        state.tasks = tasks;
+        renderTasksTable();
+        hideLoading();
+      }).getAllTasks();
+    }).getAllProperties();
+  }).getAllClients();
+}
+
+function refreshCurrentView() {
+  refreshAllData(false);
+}
+
+// Navigation
+function navigateTo(viewId) {
+  document.querySelectorAll('.app-view').forEach(function(v) { v.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+  
+  document.getElementById(viewId).classList.add('active');
+  
+  // Highlight nav bar button
+  if (viewId === 'view-dashboard') document.querySelectorAll('.nav-item')[0].classList.add('active');
+  if (viewId === 'view-clients') document.querySelectorAll('.nav-item')[1].classList.add('active');
+  if (viewId === 'view-properties') document.querySelectorAll('.nav-item')[2].classList.add('active');
+  if (viewId === 'view-tasks') document.querySelectorAll('.nav-item')[3].classList.add('active');
+  if (viewId === 'view-followups') document.querySelectorAll('.nav-item')[4].classList.add('active');
+}
+
+// Render Dashboard
+function renderDashboard() {
+  var d = state.dashboard;
+  document.getElementById('dash-total-clients').innerText = d.totalClients || 0;
+  document.getElementById('dash-total-properties').innerText = d.totalProperties || 0;
+  document.getElementById('dash-total-tasks').innerText = d.totalTasks || 0;
+  document.getElementById('dash-followups-due').innerText = d.followupsDue || 0;
+  document.getElementById('dash-overdue-subtext').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + (d.followupsOverdue || 0) + ' Overdue';
+
+  // Todays Task List
+  var ol = document.getElementById('todays-task-ol');
+  ol.innerHTML = '';
+  if (d.todaysTasks && d.todaysTasks.length > 0) {
+    d.todaysTasks.forEach(function(t) {
+      var li = document.createElement('li');
+      li.innerText = t.time + ' - ' + t.task + ' (' + t.who + ') [' + t.status + ']';
+      li.onclick = function() { openEditTaskForm(t.rowIndex); };
+      ol.appendChild(li);
+    });
+  } else {
+    ol.innerHTML = '<li>No tasks scheduled for today.</li>';
+  }
+}
+
+// ==========================================
+// CLIENT FORM & LIST
+// ==========================================
+function openAddClientForm() {
+  document.getElementById('form-client').reset();
+  document.getElementById('c-id').value = '';
+  document.getElementById('c-display-id').value = 'Auto Generated';
+  document.getElementById('c-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('client-form-title').innerText = '+ ADD CLIENT';
+  document.getElementById('modal-client-form').classList.remove('hidden');
+}
+
+function handleClientSubmit(e) {
+  e.preventDefault();
+  showLoading('Saving Client Record...');
+
+  var data = {
+    clientId: document.getElementById('c-id').value,
+    date: document.getElementById('c-date').value,
+    name: document.getElementById('c-name').value,
+    phone: document.getElementById('c-phone').value,
+    address: document.getElementById('c-address').value,
+    intendedUse: getMultiSelectValues('c-intended', 'c-intended-other'),
+    specialty: getMultiSelectValues('c-specialty', 'c-specialty-other'),
+    areaCategory: document.getElementById('c-area-category').value,
+    ownerCategory: document.getElementById('c-owner-category').value,
+    location: getMultiSelectValues('c-location', 'c-location-other'),
+    minSize: document.getElementById('c-min-size').value,
+    maxSize: document.getElementById('c-max-size').value,
+    sizeUnit: document.getElementById('c-size-unit').value,
+    minBudget: document.getElementById('c-min-budget').value,
+    maxBudget: document.getElementById('c-max-budget').value,
+    budgetUnit: document.getElementById('c-budget-unit').value,
+    nextFollowUp: document.getElementById('c-next-followup').value,
+    status: document.getElementById('c-status').value,
+    remarks: document.getElementById('c-remarks').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      closeModal('modal-client-form');
+      showToast('Client Saved Successfully (ID #' + res.clientId + ')');
+      refreshAllData();
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showToast('Error saving client: ' + err.message);
+    })
+    .saveClientRecord(data);
+}
+
+function renderClientsTable() {
+  var tbody = document.getElementById('clients-tbody');
+  tbody.innerHTML = '';
+  
+  state.clients.forEach(function(c) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = 
+      '<td><strong>#' + c.clientId + '</strong></td>' +
+      '<td>' + escapeHtml(c.name) + '<br><small>' + escapeHtml(c.phone) + '</small></td>' +
+      '<td>' + escapeHtml(c.intendedUse) + '<br><small>' + escapeHtml(c.specialty) + '</small></td>' +
+      '<td>' + escapeHtml(c.location) + '</td>' +
+      '<td>' + c.minBudget + '-' + c.maxBudget + ' ' + c.budgetUnit + '</td>' +
+      '<td>' + c.nextFollowUp + '</td>' +
+      '<td><span class="status-badge">' + c.status + '</span></td>' +
+      '<td>' +
+        '<div class="action-btn-group">' +
+          '<a href="tel:' + c.phone + '" class="btn-act btn-act-call"><i class="fa-solid fa-phone"></i></a>' +
+          '<a href="https://wa.me/' + cleanPhoneForWa(c.phone) + '" target="_blank" class="btn-act btn-act-wa"><i class="fa-brands fa-whatsapp"></i></a>' +
+          '<button class="btn-act btn-act-edit" onclick="openEditClientForm(' + c.clientId + ')"><i class="fa-solid fa-pen"></i></button>' +
+          '<button class="btn-act btn-act-del" onclick="confirmDeleteClient(' + c.clientId + ')"><i class="fa-solid fa-trash"></i></button>' +
+        '</div>' +
+      '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function openEditClientForm(clientId) {
+  var c = state.clients.find(function(x) { return parseInt(x.clientId, 10) === clientId; });
+  if (!c) return;
+
+  document.getElementById('c-id').value = c.clientId;
+  document.getElementById('c-display-id').value = '#' + c.clientId;
+  document.getElementById('c-date').value = formatDateForInput(c.rawDate);
+  document.getElementById('c-name').value = c.name;
+  document.getElementById('c-phone').value = c.phone;
+  document.getElementById('c-address').value = c.address;
+  document.getElementById('c-area-category').value = c.areaCategory;
+  document.getElementById('c-owner-category').value = c.ownerCategory;
+  document.getElementById('c-min-size').value = c.minSize;
+  document.getElementById('c-max-size').value = c.maxSize;
+  document.getElementById('c-size-unit').value = c.sizeUnit;
+  document.getElementById('c-min-budget').value = c.minBudget;
+  document.getElementById('c-max-budget').value = c.maxBudget;
+  document.getElementById('c-budget-unit').value = c.budgetUnit;
+  document.getElementById('c-next-followup').value = formatDateForInput(c.rawNextFollowUp);
+  document.getElementById('c-status').value = c.status;
+  document.getElementById('c-remarks').value = c.remarks;
+
+  setMultiSelectValues('c-intended', 'c-intended-other', c.intendedUse);
+  setMultiSelectValues('c-specialty', 'c-specialty-other', c.specialty);
+  setMultiSelectValues('c-location', 'c-location-other', c.location);
+
+  document.getElementById('client-form-title').innerText = 'EDIT CLIENT #' + c.clientId;
+  document.getElementById('modal-client-form').classList.remove('hidden');
+}
+
+function confirmDeleteClient(id) {
+  if (confirm("Are you sure you want to permanently delete Client #" + id + "?")) {
+    showLoading('Deleting Client...');
+    google.script.run
+      .withSuccessHandler(function() {
+        showToast('Client #' + id + ' Deleted');
+        refreshAllData();
+      })
+      .deleteClientRecord(id);
+  }
+}
+
+// ==========================================
+// PROPERTY FORM & LIST
+// ==========================================
+function openAddPropertyForm() {
+  document.getElementById('form-property').reset();
+  document.getElementById('p-id').value = '';
+  document.getElementById('p-display-id').value = 'Auto Generated';
+  document.getElementById('p-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('property-form-title').innerText = '+ ADD PROPERTY';
+  document.getElementById('modal-property-form').classList.remove('hidden');
+}
+
+function handlePropertySubmit(e) {
+  e.preventDefault();
+  showLoading('Saving Property Listing...');
+
+  var data = {
+    propertyId: document.getElementById('p-id').value,
+    dateListed: document.getElementById('p-date').value,
+    keyMan: document.getElementById('p-keyman').value,
+    phone: document.getElementById('p-phone').value,
+    intendedUse: getMultiSelectValues('p-intended', 'p-intended-other'),
+    specialty: getMultiSelectValues('p-specialty', 'p-specialty-other'),
+    areaCategory: document.getElementById('p-area-category').value,
+    ownerCategory: document.getElementById('p-owner-category').value,
+    location: getMultiSelectValues('p-location', 'p-location-other'),
+    size: document.getElementById('p-size').value,
+    sizeUnit: document.getElementById('p-size-unit').value,
+    price: document.getElementById('p-price').value,
+    priceUnit: document.getElementById('p-price-unit').value,
+    pricePlotUnit: document.getElementById('p-price-plot-unit').value,
+    addressOfProperty: document.getElementById('p-address').value,
+    ownerDetails: getMultiSelectValues('p-owner-details', null),
+    roadInfra: document.getElementById('p-road').value,
+    waterInfra: document.getElementById('p-water').value,
+    electricityInfra: document.getElementById('p-electricity').value,
+    disputeDetails: document.getElementById('p-dispute').value,
+    mediaTaken: document.getElementById('p-media').value,
+    googleLocation: document.getElementById('p-google-loc').value,
+    verified: document.getElementById('p-verified').value,
+    availableStatus: document.getElementById('p-status').value,
+    remarks: document.getElementById('p-remarks').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      closeModal('modal-property-form');
+      showToast('Property Saved Successfully (ID #' + res.propertyId + ')');
+      refreshAllData();
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showToast('Error saving property: ' + err.message);
+    })
+    .savePropertyRecord(data);
+}
+
+function renderPropertiesTable() {
+  var tbody = document.getElementById('properties-tbody');
+  tbody.innerHTML = '';
+  
+  state.properties.forEach(function(p) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = 
+      '<td><strong>#' + p.propertyId + '</strong></td>' +
+      '<td>' + escapeHtml(p.keyMan) + '<br><small>' + escapeHtml(p.phone) + '</small></td>' +
+      '<td>' + escapeHtml(p.intendedUse) + '<br><small>' + escapeHtml(p.specialty) + '</small></td>' +
+      '<td>' + escapeHtml(p.location) + '<br><small>' + escapeHtml(p.addressOfProperty) + '</small></td>' +
+      '<td>' + p.size + ' ' + p.sizeUnit + '</td>' +
+      '<td>' + p.price + ' ' + p.priceUnit + '</td>' +
+      '<td><span class="status-badge">' + p.availableStatus + '</span></td>' +
+      '<td>' +
+        '<div class="action-btn-group">' +
+          '<a href="tel:' + p.phone + '" class="btn-act btn-act-call"><i class="fa-solid fa-phone"></i></a>' +
+          '<a href="https://wa.me/' + cleanPhoneForWa(p.phone) + '" target="_blank" class="btn-act btn-act-wa"><i class="fa-brands fa-whatsapp"></i></a>' +
+          '<button class="btn-act btn-act-edit" onclick="openEditPropertyForm(' + p.propertyId + ')"><i class="fa-solid fa-pen"></i></button>' +
+          '<button class="btn-act btn-act-del" onclick="confirmDeleteProperty(' + p.propertyId + ')"><i class="fa-solid fa-trash"></i></button>' +
+        '</div>' +
+      '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function openEditPropertyForm(propertyId) {
+  var p = state.properties.find(function(x) { return parseInt(x.propertyId, 10) === propertyId; });
+  if (!p) return;
+
+  document.getElementById('p-id').value = p.propertyId;
+  document.getElementById('p-display-id').value = '#' + p.propertyId;
+  document.getElementById('p-date').value = formatDateForInput(p.rawDateListed);
+  document.getElementById('p-keyman').value = p.keyMan;
+  document.getElementById('p-phone').value = p.phone;
+  document.getElementById('p-area-category').value = p.areaCategory;
+  document.getElementById('p-owner-category').value = p.ownerCategory;
+  document.getElementById('p-size').value = p.size;
+  document.getElementById('p-size-unit').value = p.sizeUnit;
+  document.getElementById('p-price').value = p.price;
+  document.getElementById('p-price-unit').value = p.priceUnit;
+  document.getElementById('p-price-plot-unit').value = p.pricePlotUnit;
+  document.getElementById('p-address').value = p.addressOfProperty;
+  document.getElementById('p-road').value = p.roadInfra;
+  document.getElementById('p-water').value = p.waterInfra;
+  document.getElementById('p-electricity').value = p.electricityInfra;
+  document.getElementById('p-dispute').value = p.disputeDetails;
+  document.getElementById('p-media').value = p.mediaTaken;
+  document.getElementById('p-google-loc').value = p.googleLocation;
+  document.getElementById('p-verified').value = p.verified;
+  document.getElementById('p-status').value = p.availableStatus;
+  document.getElementById('p-remarks').value = p.remarks;
+
+  setMultiSelectValues('p-intended', 'p-intended-other', p.intendedUse);
+  setMultiSelectValues('p-specialty', 'p-specialty-other', p.specialty);
+  setMultiSelectValues('p-location', 'p-location-other', p.location);
+  setMultiSelectValues('p-owner-details', null, p.ownerDetails);
+
+  document.getElementById('property-form-title').innerText = 'EDIT PROPERTY #' + p.propertyId;
+  document.getElementById('modal-property-form').classList.remove('hidden');
+}
+
+function confirmDeleteProperty(id) {
+  if (confirm("Are you sure you want to delete Property listing #" + id + "?")) {
+    showLoading('Deleting Property...');
+    google.script.run
+      .withSuccessHandler(function() {
+        showToast('Property #' + id + ' Deleted');
+        refreshAllData();
+      })
+      .deletePropertyRecord(id);
+  }
+}
+
+// ==========================================
+// TASK FORM & LIST
+// ==========================================
+function openAddTaskForm() {
+  document.getElementById('form-task').reset();
+  document.getElementById('t-row-index').value = '';
+  document.getElementById('t-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('task-form-title').innerText = '+ ADD TASK';
+  document.getElementById('modal-task-form').classList.remove('hidden');
+}
+
+function handleTaskSubmit(e) {
+  e.preventDefault();
+  showLoading('Saving Task...');
+
+  var data = {
+    rowIndex: document.getElementById('t-row-index').value,
+    date: document.getElementById('t-date').value,
+    time: document.getElementById('t-time').value,
+    task: document.getElementById('t-task').value,
+    taskType: getSelectWithOther('t-type', 't-type-other'),
+    place: document.getElementById('t-place').value,
+    whoAttend: getSelectWithOther('t-who', 't-who-other'),
+    status: document.getElementById('t-status').value,
+    remarks: document.getElementById('t-remarks').value
+  };
+
+  google.script.run
+    .withSuccessHandler(function() {
+      closeModal('modal-task-form');
+      showToast('Task Saved Successfully');
+      refreshAllData();
+    })
+    .saveTaskRecord(data);
+}
+
+function renderTasksTable() {
+  var tbody = document.getElementById('tasks-tbody');
+  tbody.innerHTML = '';
+  
+  state.tasks.forEach(function(t) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = 
+      '<td>' + t.date + '<br><small>' + escapeHtml(t.time) + '</small></td>' +
+      '<td>' + escapeHtml(t.task) + '</td>' +
+      '<td>' + escapeHtml(t.taskType) + '</td>' +
+      '<td>' + escapeHtml(t.place) + '</td>' +
+      '<td>' + escapeHtml(t.whoAttend) + '</td>' +
+      '<td><span class="status-badge">' + t.status + '</span></td>' +
+      '<td>' +
+        '<div class="action-btn-group">' +
+          '<button class="btn-act btn-act-edit" onclick="openEditTaskForm(' + t.rowIndex + ')"><i class="fa-solid fa-pen"></i></button>' +
+          '<button class="btn-act btn-act-del" onclick="confirmDeleteTask(' + t.rowIndex + ')"><i class="fa-solid fa-trash"></i></button>' +
+        '</div>' +
+      '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function openEditTaskForm(rowIndex) {
+  var t = state.tasks.find(function(x) { return x.rowIndex === rowIndex; });
+  if (!t) return;
+
+  document.getElementById('t-row-index').value = t.rowIndex;
+  document.getElementById('t-date').value = formatDateForInput(t.rawDate);
+  document.getElementById('t-time').value = t.time;
+  document.getElementById('t-task').value = t.task;
+  document.getElementById('t-place').value = t.place;
+  document.getElementById('t-status').value = t.status;
+  document.getElementById('t-remarks').value = t.remarks;
+
+  setSelectWithOther('t-type', 't-type-other', t.taskType);
+  setSelectWithOther('t-who', 't-who-other', t.whoAttend);
+
+  document.getElementById('task-form-title').innerText = 'EDIT TASK';
+  document.getElementById('modal-task-form').classList.remove('hidden');
+}
+
+function confirmDeleteTask(rowIndex) {
+  if (confirm("Are you sure you want to delete this task entry?")) {
+    showLoading('Deleting Task...');
+    google.script.run
+      .withSuccessHandler(function() {
+        showToast('Task Removed');
+        refreshAllData();
+      })
+      .deleteTaskRecord(rowIndex);
+  }
+}
+
+// ==========================================
+// FOLLOW-UPS RENDERING
+// ==========================================
+function renderFollowups() {
+  var overdueDiv = document.getElementById('followup-list-overdue');
+  var todayDiv = document.getElementById('followup-list-today');
+  var upcomingDiv = document.getElementById('followup-list-upcoming');
+
+  overdueDiv.innerHTML = '';
+  todayDiv.innerHTML = '';
+  upcomingDiv.innerHTML = '';
+
+  var now = new Date();
+  now.setHours(0,0,0,0);
+
+  state.clients.forEach(function(c) {
+    if (c.status === 'Converted' || c.status === 'Close Deal' || !c.rawNextFollowUp) return;
+
+    var fDate = new Date(c.rawNextFollowUp);
+    if (isNaN(fDate.getTime())) return;
+    fDate.setHours(0,0,0,0);
+
+    var card = document.createElement('div');
+    card.className = 'card card-blue';
+    card.style.marginBottom = '8px';
+    card.innerHTML = 
+      '<div style="flex:1">' +
+        '<strong>#' + c.clientId + ' - ' + escapeHtml(c.name) + '</strong> (' + c.phone + ')<br>' +
+        '<small>Follow Up: ' + c.nextFollowUp + ' | Intended: ' + escapeHtml(c.intendedUse) + '</small>' +
+      '</div>' +
+      '<button class="btn-primary" onclick="openEditClientForm(' + c.clientId + ')">Update</button>';
+
+    if (fDate.getTime() < now.getTime()) {
+      overdueDiv.appendChild(card);
+    } else if (fDate.getTime() === now.getTime()) {
+      todayDiv.appendChild(card);
+    } else {
+      upcomingDiv.appendChild(card);
+    }
+  });
+
+  if (!overdueDiv.hasChildNodes()) overdueDiv.innerHTML = '<p class="text-muted">No overdue follow-ups!</p>';
+  if (!todayDiv.hasChildNodes()) todayDiv.innerHTML = '<p class="text-muted">No follow-ups due today.</p>';
+  if (!upcomingDiv.hasChildNodes()) upcomingDiv.innerHTML = '<p class="text-muted">No upcoming follow-ups scheduled.</p>';
+}
+
+// ==========================================
+// MATCHMAKER INTERFACE CONTROLLER
+// ==========================================
+function openMatchmakerModal(mode) {
+  state.currentMatchmakerMode = mode;
+  var sel = document.getElementById('matchmaker-select-item');
+  sel.innerHTML = '<option value="">-- Choose Record --</option>';
+
+  if (mode === 'property') {
+    document.getElementById('matchmaker-title').innerText = 'MATCHMAKER BY PROPERTY';
+    document.getElementById('matchmaker-select-label').innerText = 'Select Property to Find Matching Clients:';
+    document.getElementById('matchmaker-options').classList.add('hidden');
+
+    state.properties.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.propertyId;
+      opt.innerText = 'Property #' + p.propertyId + ' - ' + p.location + ' (' + p.price + ' ' + p.priceUnit + ')';
+      sel.appendChild(opt);
+    });
+  } else {
+    document.getElementById('matchmaker-title').innerText = 'MATCHMAKER BY CLIENT';
+    document.getElementById('matchmaker-select-label').innerText = 'Select Client Requirement to Find Properties:';
+    document.getElementById('matchmaker-options').classList.remove('hidden');
+
+    state.clients.forEach(function(c) {
+      var opt = document.createElement('option');
+      opt.value = c.clientId;
+      opt.innerText = 'Client #' + c.clientId + ' - ' + c.name + ' (' + c.intendedUse + ')';
+      sel.appendChild(opt);
+    });
+  }
+
+  document.getElementById('matchmaker-results-container').innerHTML = '<div class="placeholder-text">Select a record above to run the matching engine.</div>';
+  document.getElementById('modal-matchmaker').classList.remove('hidden');
+}
+
+function executeMatchmaking() {
+  var id = document.getElementById('matchmaker-select-item').value;
+  if (!id) return;
+
+  showLoading('Running Matchmaking Engine...');
+
+  if (state.currentMatchmakerMode === 'property') {
+    google.script.run
+      .withSuccessHandler(renderPropertyMatches)
+      .matchMakerByProperty(id);
+  } else {
+    var includeSold = document.getElementById('match-include-sold').checked;
+    google.script.run
+      .withSuccessHandler(renderClientMatches)
+      .matchMakerByClient(id, includeSold);
+  }
+}
+
+function renderClientMatches(res) {
+  hideLoading();
+  var container = document.getElementById('matchmaker-results-container');
+  container.innerHTML = '<h4>Matches for Client #' + res.client.clientId + ' (' + escapeHtml(res.client.name) + ')</h4>';
+
+  if (!res.matches || res.matches.length === 0) {
+    container.innerHTML += '<p>No matching properties found based on current requirements.</p>';
+    return;
+  }
+
+  res.matches.forEach(function(m) {
+    var box = document.createElement('div');
+    box.className = 'match-result-card';
+    box.style.border = '1px solid #ccc';
+    box.style.borderRadius = '8px';
+    box.style.padding = '10px';
+    box.style.marginBottom = '8px';
+    box.style.background = '#fdfdfd';
+
+    box.innerHTML = 
+      '<div style="display:flex; justify-content:space-between; font-weight:bold;">' +
+        '<span>Property #' + m.property.propertyId + ' - ' + escapeHtml(m.property.location) + '</span>' +
+        '<span style="color:#2e7d32">' + m.matchScore + '% Match</span>' +
+      '</div>' +
+      '<div>Price: ' + m.property.price + ' ' + m.property.priceUnit + ' | Size: ' + m.property.size + ' ' + m.property.sizeUnit + '</div>' +
+      '<div style="font-size:12px; color:green; margin-top:4px;">✔ ' + m.matchReasons.join('<br>✔ ') + '</div>' +
+      (m.mismatchReasons.length > 0 ? '<div style="font-size:12px; color:red; margin-top:4px;">✖ ' + m.mismatchReasons.join('<br>✖ ') + '</div>' : '');
+
+    container.appendChild(box);
+  });
+}
+
+function renderPropertyMatches(res) {
+  hideLoading();
+  var container = document.getElementById('matchmaker-results-container');
+  container.innerHTML = '<h4>Matching Clients for Property #' + res.property.propertyId + ' (' + escapeHtml(res.property.location) + ')</h4>';
+
+  if (!res.matches || res.matches.length === 0) {
+    container.innerHTML += '<p>No matching client requirements found.</p>';
+    return;
+  }
+
+  res.matches.forEach(function(m) {
+    var box = document.createElement('div');
+    box.className = 'match-result-card';
+    box.style.border = '1px solid #ccc';
+    box.style.borderRadius = '8px';
+    box.style.padding = '10px';
+    box.style.marginBottom = '8px';
+    box.style.background = '#fdfdfd';
+
+    box.innerHTML = 
+      '<div style="display:flex; justify-content:space-between; font-weight:bold;">' +
+        '<span>Client #' + m.client.clientId + ' - ' + escapeHtml(m.client.name) + ' (' + m.client.phone + ')</span>' +
+        '<span style="color:#2e7d32">' + m.matchScore + '% Match</span>' +
+      '</div>' +
+      '<div>Budget: ' + m.client.minBudget + '-' + m.client.maxBudget + ' ' + m.client.budgetUnit + '</div>' +
+      '<div style="font-size:12px; color:green; margin-top:4px;">✔ ' + m.matchReasons.join('<br>✔ ') + '</div>' +
+      (m.mismatchReasons.length > 0 ? '<div style="font-size:12px; color:red; margin-top:4px;">✖ ' + m.mismatchReasons.join('<br>✖ ') + '</div>' : '');
+
+    container.appendChild(box);
+  });
+}
+
+// ==========================================
+// HELPERS & FORM CONTROL UTILITIES
+// ==========================================
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+function saveAndAddAnotherClient() {
+  document.getElementById('c-id').value = '';
+  document.getElementById('form-client').reset();
+  openAddClientForm();
+}
+
+function saveAndAddAnotherProperty() {
+  document.getElementById('p-id').value = '';
+  document.getElementById('form-property').reset();
+  openAddPropertyForm();
+}
+
+function getMultiSelectValues(selectId, otherInputId) {
+  var select = document.getElementById(selectId);
+  var result = [];
+  for (var i = 0; i < select.options.length; i++) {
+    if (select.options[i].selected) {
+      var val = select.options[i].value;
+      if (val === 'OTHERS' && otherInputId) {
+        var otherVal = document.getElementById(otherInputId).value.trim();
+        if (otherVal) result.push("OTHERS: " + otherVal);
+      } else {
+        result.push(val);
+      }
+    }
+  }
+  return result.join(', ');
+}
+
+function setMultiSelectValues(selectId, otherInputId, rawString) {
+  var select = document.getElementById(selectId);
+  if (!rawString) return;
+  var items = String(rawString).split(',').map(function(s) { return s.trim(); });
+  
+  for (var i = 0; i < select.options.length; i++) {
+    select.options[i].selected = false;
+  }
+
+  items.forEach(function(item) {
+    if (item.indexOf('OTHERS:') === 0 && otherInputId) {
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === 'OTHERS') select.options[i].selected = true;
+      }
+      document.getElementById(otherInputId).value = item.replace('OTHERS:', '').trim();
+      document.getElementById(otherInputId).classList.remove('hidden');
+    } else {
+      for (var k = 0; k < select.options.length; k++) {
+        if (select.options[k].value === item) select.options[k].selected = true;
+      }
+    }
+  });
+}
+
+function getSelectWithOther(selectId, otherInputId) {
+  var val = document.getElementById(selectId).value;
+  if (val === 'Others' && otherInputId) {
+    var oth = document.getElementById(otherInputId).value.trim();
+    if (oth) return "Others: " + oth;
+  }
+  return val;
+}
+
+function setSelectWithOther(selectId, otherInputId, value) {
+  if (!value) return;
+  if (value.indexOf('Others:') === 0 && otherInputId) {
+    document.getElementById(selectId).value = 'Others';
+    document.getElementById(otherInputId).value = value.replace('Others:', '').trim();
+    document.getElementById(otherInputId).classList.remove('hidden');
+  } else {
+    document.getElementById(selectId).value = value;
+  }
+}
+
+function setupOtherInputTriggers() {
+  ['c-intended', 'c-specialty', 'c-location', 'p-intended', 'p-specialty', 'p-location'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', function() {
+        var otherInput = document.getElementById(id + '-other');
+        var hasOther = Array.from(el.selectedOptions).some(function(opt) { return opt.value === 'OTHERS'; });
+        if (hasOther && otherInput) otherInput.classList.remove('hidden');
+        else if (otherInput) otherInput.classList.add('hidden');
+      });
+    }
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function cleanPhoneForWa(phone) {
+  if (!phone) return '';
+  return String(phone).replace(/[^0-9]/g, '');
+}
+
+function formatDateForInput(dStr) {
+  if (!dStr) return '';
+  var d = new Date(dStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().split('T')[0];
+}
+
+function filterClientsTable() {
+  var q = document.getElementById('client-search').value.toLowerCase();
+  var st = document.getElementById('client-filter-status').value;
+  var rows = document.querySelectorAll('#clients-tbody tr');
+
+  rows.forEach(function(row) {
+    var text = row.innerText.toLowerCase();
+    var matchSearch = !q || text.indexOf(q) !== -1;
+    var matchStatus = !st || text.indexOf(st.toLowerCase()) !== -1;
+    row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+  });
+}
+
+function filterPropertiesTable() {
+  var q = document.getElementById('prop-search').value.toLowerCase();
+  var st = document.getElementById('prop-filter-status').value;
+  var rows = document.querySelectorAll('#properties-tbody tr');
+
+  rows.forEach(function(row) {
+    var text = row.innerText.toLowerCase();
+    var matchSearch = !q || text.indexOf(q) !== -1;
+    var matchStatus = !st || text.indexOf(st.toLowerCase()) !== -1;
+    row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+  });
+}
+</script>

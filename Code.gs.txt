@@ -1,0 +1,784 @@
+/**
+ * SOIL & SHELTER CRM — Backend Server Script
+ * Handles database interaction with Google Sheets, ID generation, validation, 
+ * authorization checks, and intelligent bidirectional property-client matching.
+ */
+
+// ==========================================
+// CONFIGURATION - PASTE YOUR SPREADSHEET ID HERE
+// ==========================================
+var SPREADSHEET_ID = '17gt4fPvMaiSv05J9VcSH4LYy71Y75ZbL7uRtNVtqOsk'; 
+
+// Tab Names
+var SHEET_CLIENTS = 'Clients';
+var SHEET_PROPERTIES = 'Properties';
+var SHEET_TASK = 'Task';
+
+/**
+ * Serves the HTML web app UI
+ */
+function doGet(e) {
+  var template = HtmlService.createTemplateFromFile('Index');
+  return template.evaluate()
+      .setTitle('SOIL & SHELTER CRM — Property Consultant')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Include secondary HTML files (CSS & JS)
+ */
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+/**
+ * Helper to get the active Google Sheet
+ */
+function getDb() {
+  if (!SPREADSHEET_ID || SPREADSHEET_ID === 'PASTE_YOUR_SPREADSHEET_ID_HERE') {
+    throw new Error('Spreadsheet ID is not configured in Code.gs! Please set SPREADSHEET_ID.');
+  }
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+/**
+ * Server Security & Identity Verification Check
+ */
+function getCurrentUserInfo() {
+  var email = Session.getActiveUser().getEmail();
+  return {
+    email: email || 'Authorized Partner',
+    timestamp: new Date().toISOString()
+  };
+}
+
+/**
+ * Validates sheet schema and exact column headers before operating
+ */
+function verifyDatabaseSchema() {
+  var ss = getDb();
+  var expectedSheets = [
+    {
+      name: SHEET_CLIENTS,
+      headers: ["Client ID","Date","Name","Phone","Address","Intended Use","Specialty","Area Category","Owner Category","Location","Min Size","Max Size","Size Unit","Min Budget","Max Budget","Budget Unit","Next Follow Up","Status","Remarks"]
+    },
+    {
+      name: SHEET_PROPERTIES,
+      headers: ["Property ID","Date Listed","Key Man","Phone","Intended Use","Specialty","Area Category","Owner Category","Location","Size","Size Unit","Price","Price Unit ","Price / Plot Unit","Address Of Property","Owner Details","Road Infra","Water Infra","Electricity Infra","Dispute Details","Media Taken","Google Location","Verified","Available Status","Remarks"]
+    },
+    {
+      name: SHEET_TASK,
+      headers: ["Date","Task","Task Type","Place","Time","Who Attend","Status","Remarks"]
+    }
+  ];
+
+  for (var i = 0; i < expectedSheets.length; i++) {
+    var item = expectedSheets[i];
+    var sheet = ss.getSheetByName(item.name);
+    if (!sheet) {
+      throw new Error("Missing tab in Google Sheet: '" + item.name + "'");
+    }
+    var headers = sheet.getRange(1, 1, 1, item.headers.length).getValues()[0];
+    for (var j = 0; j < item.headers.length; j++) {
+      if (String(headers[j]).trim() !== String(item.headers[j]).trim()) {
+        throw new Error("Header mismatch in tab '" + item.name + "' column " + (j + 1) + 
+                        ". Expected: '" + item.headers[j] + "', Found: '" + headers[j] + "'");
+      }
+    }
+  }
+  return true;
+}
+
+// ==========================================
+// ID GENERATION (SEQUENTIAL, LOCK-PROTECTED)
+// ==========================================
+function getNextSequentialId(sheetName, idColumnIndex) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000); // Prevent race conditions
+  try {
+    var sheet = getDb().getSheetByName(sheetName);
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return 1;
+    
+    var ids = sheet.getRange(2, idColumnIndex, lastRow - 1, 1).getValues();
+    var maxId = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var val = parseInt(ids[i][0], 10);
+      if (!isNaN(val) && val > maxId) {
+        maxId = val;
+      }
+    }
+    return maxId + 1;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// DASHBOARD DATA FETCHING
+// ==========================================
+function getDashboardData() {
+  verifyDatabaseSchema();
+  var ss = getDb();
+  
+  var clientSheet = ss.getSheetByName(SHEET_CLIENTS);
+  var propSheet = ss.getSheetByName(SHEET_PROPERTIES);
+  var taskSheet = ss.getSheetByName(SHEET_TASK);
+  
+  var clientData = clientSheet.getLastRow() > 1 ? clientSheet.getRange(2, 1, clientSheet.getLastRow() - 1, 19).getValues() : [];
+  var propData = propSheet.getLastRow() > 1 ? propSheet.getRange(2, 1, propSheet.getLastRow() - 1, 25).getValues() : [];
+  var taskData = taskSheet.getLastRow() > 1 ? taskSheet.getRange(2, 1, taskSheet.getLastRow() - 1, 8).getValues() : [];
+  
+  var todayStr = formatDateYMD(new Date());
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  // Stats calculation
+  var totalClients = clientData.length;
+  var totalProperties = propData.length;
+  var totalTasks = taskData.length;
+  
+  var followupsDueToday = 0;
+  var followupsOverdue = 0;
+
+  for (var c = 0; c < clientData.length; c++) {
+    var row = clientData[c];
+    var nextFollowUp = row[16]; // Next Follow Up column
+    var status = String(row[17]).trim().toLowerCase();
+    
+    // Skip closed/converted
+    if (status === 'converted' || status === 'close deal' || status === 'not interested') continue;
+
+    if (nextFollowUp) {
+      var fDate = new Date(nextFollowUp);
+      if (!isNaN(fDate.getTime())) {
+        fDate.setHours(0,0,0,0);
+        if (fDate.getTime() === now.getTime()) {
+          followupsDueToday++;
+        } else if (fDate.getTime() < now.getTime()) {
+          followupsOverdue++;
+        }
+      }
+    }
+  }
+
+  // Today's Task List
+  var todaysTasks = [];
+  for (var t = 0; t < taskData.length; t++) {
+    var tRow = taskData[t];
+    var tDate = tRow[0];
+    if (tDate) {
+      var formattedTDate = formatDateYMD(new Date(tDate));
+      if (formattedTDate === todayStr) {
+        todaysTasks.push({
+          rowIndex: t + 2,
+          date: formattedTDate,
+          task: tRow[1],
+          type: tRow[2],
+          place: tRow[3],
+          time: tRow[4],
+          who: tRow[5],
+          status: tRow[6],
+          remarks: tRow[7]
+        });
+      }
+    }
+  }
+
+  return {
+    totalClients: totalClients,
+    totalProperties: totalProperties,
+    totalTasks: totalTasks,
+    followupsDue: followupsDueToday + followupsOverdue,
+    followupsOverdue: followupsOverdue,
+    followupsDueToday: followupsDueToday,
+    todaysTasks: todaysTasks,
+    lastSynced: new Date().toLocaleTimeString()
+  };
+}
+
+// ==========================================
+// CLIENT CRUD OPERATIONS
+// ==========================================
+function saveClientRecord(data) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    verifyDatabaseSchema();
+    var sheet = getDb().getSheetByName(SHEET_CLIENTS);
+    
+    var isEdit = data.clientId && parseInt(data.clientId, 10) > 0;
+    var clientId = isEdit ? parseInt(data.clientId, 10) : getNextSequentialId(SHEET_CLIENTS, 1);
+
+    var rowValues = [
+      clientId,
+      data.date || formatDateYMD(new Date()),
+      data.name || '',
+      data.phone || '',
+      data.address || '',
+      data.intendedUse || '',
+      data.specialty || '',
+      data.areaCategory || '',
+      data.ownerCategory || '',
+      data.location || '',
+      data.minSize !== "" ? Number(data.minSize) : '',
+      data.maxSize !== "" ? Number(data.maxSize) : '',
+      data.sizeUnit || '',
+      data.minBudget !== "" ? Number(data.minBudget) : '',
+      data.maxBudget !== "" ? Number(data.maxBudget) : '',
+      data.budgetUnit || '',
+      data.nextFollowUp || '',
+      data.status || 'New',
+      data.remarks || ''
+    ];
+
+    if (isEdit) {
+      var lastRow = sheet.getLastRow();
+      var found = false;
+      if (lastRow > 1) {
+        var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var i = 0; i < ids.length; i++) {
+          if (parseInt(ids[i][0], 10) === clientId) {
+            sheet.getRange(i + 2, 1, 1, 19).setValues([rowValues]);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) throw new Error("Client ID #" + clientId + " not found for editing.");
+    } else {
+      sheet.appendRow(rowValues);
+    }
+    return { success: true, clientId: clientId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getAllClients() {
+  verifyDatabaseSchema();
+  var sheet = getDb().getSheetByName(SHEET_CLIENTS);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  
+  var raw = sheet.getRange(2, 1, lastRow - 1, 19).getValues();
+  return raw.map(function(r) {
+    return {
+      clientId: r[0],
+      date: formatDateDisplay(r[1]),
+      rawDate: r[1],
+      name: r[2],
+      phone: String(r[3]),
+      address: r[4],
+      intendedUse: r[5],
+      specialty: r[6],
+      areaCategory: r[7],
+      ownerCategory: r[8],
+      location: r[9],
+      minSize: r[10],
+      maxSize: r[11],
+      sizeUnit: r[12],
+      minBudget: r[13],
+      maxBudget: r[14],
+      budgetUnit: r[15],
+      nextFollowUp: formatDateDisplay(r[16]),
+      rawNextFollowUp: r[16],
+      status: r[17],
+      remarks: r[18]
+    };
+  });
+}
+
+function deleteClientRecord(clientId) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sheet = getDb().getSheetByName(SHEET_CLIENTS);
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return false;
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (parseInt(ids[i][0], 10) === parseInt(clientId, 10)) {
+        sheet.deleteRow(i + 2);
+        return true;
+      }
+    }
+    return false;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// PROPERTY CRUD OPERATIONS
+// ==========================================
+function savePropertyRecord(data) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    verifyDatabaseSchema();
+    var sheet = getDb().getSheetByName(SHEET_PROPERTIES);
+    
+    var isEdit = data.propertyId && parseInt(data.propertyId, 10) > 0;
+    var propertyId = isEdit ? parseInt(data.propertyId, 10) : getNextSequentialId(SHEET_PROPERTIES, 1);
+
+    var rowValues = [
+      propertyId,
+      data.dateListed || formatDateYMD(new Date()),
+      data.keyMan || '',
+      data.phone || '',
+      data.intendedUse || '',
+      data.specialty || '',
+      data.areaCategory || '',
+      data.ownerCategory || '',
+      data.location || '',
+      data.size !== "" ? Number(data.size) : '',
+      data.sizeUnit || '',
+      data.price !== "" ? Number(data.price) : '',
+      data.priceUnit || '', // Writes to column "Price Unit "
+      data.pricePlotUnit || '',
+      data.addressOfProperty || '',
+      data.ownerDetails || '',
+      data.roadInfra || '',
+      data.waterInfra || '',
+      data.electricityInfra || '',
+      data.disputeDetails || '',
+      data.mediaTaken || 'No',
+      data.googleLocation || 'No',
+      data.verified || 'No',
+      data.availableStatus || 'AVAILABLE',
+      data.remarks || ''
+    ];
+
+    if (isEdit) {
+      var lastRow = sheet.getLastRow();
+      var found = false;
+      if (lastRow > 1) {
+        var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (var i = 0; i < ids.length; i++) {
+          if (parseInt(ids[i][0], 10) === propertyId) {
+            sheet.getRange(i + 2, 1, 1, 25).setValues([rowValues]);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) throw new Error("Property ID #" + propertyId + " not found for editing.");
+    } else {
+      sheet.appendRow(rowValues);
+    }
+    return { success: true, propertyId: propertyId };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getAllProperties() {
+  verifyDatabaseSchema();
+  var sheet = getDb().getSheetByName(SHEET_PROPERTIES);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  
+  var raw = sheet.getRange(2, 1, lastRow - 1, 25).getValues();
+  return raw.map(function(r) {
+    return {
+      propertyId: r[0],
+      dateListed: formatDateDisplay(r[1]),
+      rawDateListed: r[1],
+      keyMan: r[2],
+      phone: String(r[3]),
+      intendedUse: r[4],
+      specialty: r[5],
+      areaCategory: r[6],
+      ownerCategory: r[7],
+      location: r[8],
+      size: r[9],
+      sizeUnit: r[10],
+      price: r[11],
+      priceUnit: r[12], // Respects trailing space header in mapping
+      pricePlotUnit: r[13],
+      addressOfProperty: r[14],
+      ownerDetails: r[15],
+      roadInfra: r[16],
+      waterInfra: r[17],
+      electricityInfra: r[18],
+      disputeDetails: r[19],
+      mediaTaken: r[20],
+      googleLocation: r[21],
+      verified: r[22],
+      availableStatus: r[23],
+      remarks: r[24]
+    };
+  });
+}
+
+function deletePropertyRecord(propertyId) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sheet = getDb().getSheetByName(SHEET_PROPERTIES);
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return false;
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (parseInt(ids[i][0], 10) === parseInt(propertyId, 10)) {
+        sheet.deleteRow(i + 2);
+        return true;
+      }
+    }
+    return false;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// TASK CRUD OPERATIONS
+// ==========================================
+function saveTaskRecord(data) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    verifyDatabaseSchema();
+    var sheet = getDb().getSheetByName(SHEET_TASK);
+    
+    var rowValues = [
+      data.date || formatDateYMD(new Date()),
+      data.task || '',
+      data.taskType || '',
+      data.place || '',
+      data.time || '',
+      data.whoAttend || '',
+      data.status || 'Pending',
+      data.remarks || ''
+    ];
+
+    if (data.rowIndex && parseInt(data.rowIndex, 10) >= 2) {
+      sheet.getRange(parseInt(data.rowIndex, 10), 1, 1, 8).setValues([rowValues]);
+    } else {
+      sheet.appendRow(rowValues);
+    }
+    return { success: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getAllTasks() {
+  verifyDatabaseSchema();
+  var sheet = getDb().getSheetByName(SHEET_TASK);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  
+  var raw = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  return raw.map(function(r, index) {
+    return {
+      rowIndex: index + 2,
+      date: formatDateDisplay(r[0]),
+      rawDate: r[0],
+      task: r[1],
+      taskType: r[2],
+      place: r[3],
+      time: r[4],
+      whoAttend: r[5],
+      status: r[6],
+      remarks: r[7]
+    };
+  });
+}
+
+function deleteTaskRecord(rowIndex) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sheet = getDb().getSheetByName(SHEET_TASK);
+    if (rowIndex >= 2 && rowIndex <= sheet.getLastRow()) {
+      sheet.deleteRow(rowIndex);
+      return true;
+    }
+    return false;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ==========================================
+// MATCHMAKING ALGORITHM
+// ==========================================
+
+// Helper: Normalize Budget/Price to Rupees
+function normalizeMonetaryAmount(value, unit) {
+  if (value === "" || value === null || isNaN(value)) return null;
+  var num = Number(value);
+  var u = String(unit).toLowerCase().trim();
+  if (u === 'thousand') return num * 1000;
+  if (u === 'lakh') return num * 100000;
+  if (u === 'crore') return num * 10000000;
+  return num;
+}
+
+// Helper: Check land size unit equivalence
+function normalizeSizeAmount(value, unit) {
+  if (value === "" || value === null || isNaN(value)) return null;
+  var num = Number(value);
+  var u = String(unit).toLowerCase().trim();
+  // Standard conversion baseline in Decimals
+  if (u === 'decimal') return num;
+  if (u === 'acre') return num * 100;
+  if (u === 'katha') return num * 1.65; // Regional Bengal standard
+  if (u === 'bigha') return num * 33;   // Regional Bengal standard
+  return num;
+}
+
+// Helper: Split multi-select values
+function parseMultiSelect(val) {
+  if (!val) return [];
+  return String(val).split(',').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+}
+
+/**
+ * MATCH MAKER BY CLIENT — Finds matching properties for a selected client
+ */
+function matchMakerByClient(clientId, includeSold) {
+  var clients = getAllClients();
+  var properties = getAllProperties();
+
+  var client = clients.find(function(c) { return parseInt(c.clientId, 10) === parseInt(clientId, 10); });
+  if (!client) throw new Error("Client #" + clientId + " not found.");
+
+  var clientIntended = parseMultiSelect(client.intendedUse);
+  var clientSpecialty = parseMultiSelect(client.specialty);
+  var clientLocations = parseMultiSelect(client.location);
+  var clientMinBudgetRupees = normalizeMonetaryAmount(client.minBudget, client.budgetUnit);
+  var clientMaxBudgetRupees = normalizeMonetaryAmount(client.maxBudget, client.budgetUnit);
+  var clientMinSizeNormalized = normalizeSizeAmount(client.minSize, client.sizeUnit);
+  var clientMaxSizeNormalized = normalizeSizeAmount(client.maxSize, client.sizeUnit);
+
+  var results = [];
+
+  properties.forEach(function(p) {
+    if (!includeSold && String(p.availableStatus).toUpperCase() === 'SOLD') return;
+
+    var score = 0;
+    var totalPossible = 0;
+    var matchReasons = [];
+    var mismatchReasons = [];
+
+    // 1. Intended Use Match (Weight: 25)
+    totalPossible += 25;
+    var propIntended = parseMultiSelect(p.intendedUse);
+    var intendedOverlap = clientIntended.filter(function(x) { return propIntended.indexOf(x) !== -1; });
+    if (clientIntended.length === 0 || clientIntended.indexOf('NOT SPECIFIC') !== -1) {
+      score += 25;
+      matchReasons.push("Intended Use: Client has flexible requirement.");
+    } else if (intendedOverlap.length > 0) {
+      score += 25;
+      matchReasons.push("Intended Use Matched: " + intendedOverlap.join(', '));
+    } else {
+      mismatchReasons.push("Intended Use mismatch (" + p.intendedUse + " vs required " + client.intendedUse + ")");
+    }
+
+    // 2. Location Match (Weight: 25)
+    totalPossible += 25;
+    var propLocations = parseMultiSelect(p.location);
+    var locOverlap = clientLocations.filter(function(x) { return propLocations.indexOf(x) !== -1; });
+    if (clientLocations.length === 0 || clientLocations.indexOf('NOT SPECIFIC') !== -1) {
+      score += 25;
+      matchReasons.push("Location: Flexible location requested.");
+    } else if (locOverlap.length > 0) {
+      score += 25;
+      matchReasons.push("Location Matched: " + locOverlap.join(', '));
+    } else {
+      mismatchReasons.push("Location mismatch (" + p.location + ")");
+    }
+
+    // 3. Budget Match (Weight: 20)
+    totalPossible += 20;
+    var propPriceRupees = normalizeMonetaryAmount(p.price, p.priceUnit);
+    if (propPriceRupees !== null) {
+      if (clientMinBudgetRupees !== null && propPriceRupees < clientMinBudgetRupees) {
+        mismatchReasons.push("Price below minimum budget limit.");
+      } else if (clientMaxBudgetRupees !== null && propPriceRupees > clientMaxBudgetRupees) {
+        mismatchReasons.push("Price (" + p.price + " " + p.priceUnit + ") exceeds max budget (" + client.maxBudget + " " + client.budgetUnit + ")");
+      } else {
+        score += 20;
+        matchReasons.push("Price within budget range.");
+      }
+    } else {
+      score += 10; // Partial score if unpriced
+      matchReasons.push("Property price unlisted; requires consultation.");
+    }
+
+    // 4. Size Match (Weight: 15)
+    totalPossible += 15;
+    var propSizeNormalized = normalizeSizeAmount(p.size, p.sizeUnit);
+    if (propSizeNormalized !== null) {
+      if (clientMinSizeNormalized !== null && propSizeNormalized < clientMinSizeNormalized) {
+        mismatchReasons.push("Land size smaller than minimum requirement.");
+      } else if (clientMaxSizeNormalized !== null && propSizeNormalized > clientMaxSizeNormalized) {
+        mismatchReasons.push("Land size larger than maximum budget requirement.");
+      } else {
+        score += 15;
+        matchReasons.push("Land size matches requested criteria.");
+      }
+    } else {
+      score += 8;
+      matchReasons.push("Land size not specified on property.");
+    }
+
+    // 5. Specialty & Categories (Weight: 15)
+    totalPossible += 15;
+    var propSpecialty = parseMultiSelect(p.specialty);
+    var specOverlap = clientSpecialty.filter(function(x) { return propSpecialty.indexOf(x) !== -1; });
+    if (specOverlap.length > 0 || clientSpecialty.length === 0) {
+      score += 15;
+      if (specOverlap.length > 0) matchReasons.push("Specialty Matched: " + specOverlap.join(', '));
+    } else {
+      mismatchReasons.push("Specialty criteria mismatch.");
+    }
+
+    var percentage = Math.round((score / totalPossible) * 100);
+
+    if (percentage >= 35) {
+      results.push({
+        property: p,
+        matchScore: percentage,
+        matchReasons: matchReasons,
+        mismatchReasons: mismatchReasons
+      });
+    }
+  });
+
+  results.sort(function(a, b) { return b.matchScore - a.matchScore; });
+  return { client: client, matches: results };
+}
+
+/**
+ * MATCH MAKER BY PROPERTY — Finds matching clients for a selected property
+ */
+function matchMakerByProperty(propertyId) {
+  var clients = getAllClients();
+  var properties = getAllProperties();
+
+  var property = properties.find(function(p) { return parseInt(p.propertyId, 10) === parseInt(propertyId, 10); });
+  if (!property) throw new Error("Property #" + propertyId + " not found.");
+
+  var propIntended = parseMultiSelect(property.intendedUse);
+  var propSpecialty = parseMultiSelect(property.specialty);
+  var propLocations = parseMultiSelect(property.location);
+  var propPriceRupees = normalizeMonetaryAmount(property.price, property.priceUnit);
+  var propSizeNormalized = normalizeSizeAmount(property.size, property.sizeUnit);
+
+  var results = [];
+
+  clients.forEach(function(c) {
+    var score = 0;
+    var totalPossible = 0;
+    var matchReasons = [];
+    var mismatchReasons = [];
+
+    var clientIntended = parseMultiSelect(c.intendedUse);
+    var clientLocations = parseMultiSelect(c.location);
+    var clientMinBudgetRupees = normalizeMonetaryAmount(c.minBudget, c.budgetUnit);
+    var clientMaxBudgetRupees = normalizeMonetaryAmount(c.maxBudget, c.budgetUnit);
+    var clientMinSizeNormalized = normalizeSizeAmount(c.minSize, c.sizeUnit);
+    var clientMaxSizeNormalized = normalizeSizeAmount(c.maxSize, c.sizeUnit);
+
+    // Intended Use
+    totalPossible += 25;
+    var intendedOverlap = propIntended.filter(function(x) { return clientIntended.indexOf(x) !== -1; });
+    if (clientIntended.length === 0 || clientIntended.indexOf('NOT SPECIFIC') !== -1) {
+      score += 25;
+      matchReasons.push("Client open to various property types.");
+    } else if (intendedOverlap.length > 0) {
+      score += 25;
+      matchReasons.push("Intended Use Matched: " + intendedOverlap.join(', '));
+    } else {
+      mismatchReasons.push("Client prefers " + c.intendedUse);
+    }
+
+    // Location
+    totalPossible += 25;
+    var locOverlap = propLocations.filter(function(x) { return clientLocations.indexOf(x) !== -1; });
+    if (clientLocations.length === 0 || clientLocations.indexOf('NOT SPECIFIC') !== -1) {
+      score += 25;
+      matchReasons.push("Client has no location restriction.");
+    } else if (locOverlap.length > 0) {
+      score += 25;
+      matchReasons.push("Location Matched: " + locOverlap.join(', '));
+    } else {
+      mismatchReasons.push("Location mismatch (" + c.location + ")");
+    }
+
+    // Budget
+    totalPossible += 25;
+    if (propPriceRupees !== null) {
+      if (clientMaxBudgetRupees !== null && propPriceRupees > clientMaxBudgetRupees) {
+        mismatchReasons.push("Property price exceeds client's max budget (" + c.maxBudget + " " + c.budgetUnit + ")");
+      } else if (clientMinBudgetRupees !== null && propPriceRupees < clientMinBudgetRupees) {
+        mismatchReasons.push("Price below client's min budget focus.");
+      } else {
+        score += 25;
+        matchReasons.push("Property price within client budget.");
+      }
+    } else {
+      score += 12;
+      matchReasons.push("Price unlisted; within potential range.");
+    }
+
+    // Size
+    totalPossible += 25;
+    if (propSizeNormalized !== null) {
+      if (clientMinSizeNormalized !== null && propSizeNormalized < clientMinSizeNormalized) {
+        mismatchReasons.push("Property smaller than client min requirement.");
+      } else if (clientMaxSizeNormalized !== null && propSizeNormalized > clientMaxSizeNormalized) {
+        mismatchReasons.push("Property larger than client max requirement.");
+      } else {
+        score += 25;
+        matchReasons.push("Property size matches requirement.");
+      }
+    } else {
+      score += 12;
+      matchReasons.push("Property size flexible.");
+    }
+
+    var percentage = Math.round((score / totalPossible) * 100);
+
+    if (percentage >= 35) {
+      results.push({
+        client: c,
+        matchScore: percentage,
+        matchReasons: matchReasons,
+        mismatchReasons: mismatchReasons
+      });
+    }
+  });
+
+  results.sort(function(a, b) { return b.matchScore - a.matchScore; });
+  return { property: property, matches: results };
+}
+
+// ==========================================
+// UTILITY DATE FORMATTERS
+// ==========================================
+function formatDateYMD(d) {
+  if (!d) return '';
+  var date = new Date(d);
+  if (isNaN(date.getTime())) return '';
+  var yyyy = date.getFullYear();
+  var mm = String(date.getMonth() + 1).padStart(2, '0');
+  var dd = String(date.getDate()).padStart(2, '0');
+  return yyyy + '-' + mm + '-' + dd;
+}
+
+function formatDateDisplay(d) {
+  if (!d) return '';
+  var date = new Date(d);
+  if (isNaN(date.getTime())) return String(d);
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var dd = String(date.getDate()).padStart(2, '0');
+  var mmm = months[date.getMonth()];
+  var yyyy = date.getFullYear();
+  return dd + ' ' + mmm + ' ' + yyyy;
+}
