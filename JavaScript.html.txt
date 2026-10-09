@@ -1,8 +1,7 @@
 <script>
 /**
- * SOIL & SHELTER CRM — Frontend Controller Logic
- * Manages UI interactions, real-time polling, form lifecycle, WhatsApp/Call shortcuts,
- * and server calls via google.script.run.
+ * SOIL & SHELTER CRM — Updated Frontend Controller
+ * Multi-select Checkbox Grid Charts for Intended Use, Specialty, Location, & Owner Details
  */
 
 var state = {
@@ -13,19 +12,99 @@ var state = {
   currentMatchmakerMode: 'property'
 };
 
-// Initialize Application
+var OPTIONS = {
+  intendedUse: ["RESIDENT", "FARMHOUSE", "SECOND HOME", "INVESTMENT", "HOUSHING PROJECT", "RESORT", "HOMESTAY", "HOTEL", "RESTURENT", "FACTORY", "FARMING", "TEA PLANTATION", "POULTRY FARMING", "HATACHERY", "AYURVEDA", "FISHARY", "SCHOOL", "HOSPITAL", "ASHRAM", "AGRICULTURE", "OTHERS"],
+  specialty: ["CORE HILL", "HILL VIEW", "KJ VIEW", "RIVER SIDE", "NH 17 SIDE", "NH 717 SIDE", "REMOTE AREA", "BAZAR AREA", "FOREST SIDE", "DONBOSKO AREA", "HIGH LAND", "UP & DOWN LAND", "SWAMP LAND", "PADDY FIELD", "OTHERS"],
+  clientLocation: ["NOT SPECIFIC", "OODLABARI", "DON BOSKO", "TURIBARI", "MANABARI", "P DAMDIM", "MALBAZAR", "BORODIGHI", "CHALSHA", "MURTI", "LATAGURI", "KRANTI", "KALIMPONG", "DARJEELING", "LAVA", "CHUIKHIM", "RESOP", "LOLEGAON", "SAMSING", "JHALONG", "CHILAPATA", "BELAKOBA", "SHALBARI", "MANJING", "JHANDI", "NOKDARA", "SAMTHAR", "PUBUNG", "PANBU", "CHARKHOL", "SINGJEE", "GAJOLDOBA", "SILIGURI", "MIRIK", "NAXALBARI", "MATIGARA", "OTHERS"],
+  propertyLocation: ["OODLABARI", "DON BOSKO", "TURIBARI", "MANABARI", "P DAMDIM", "MALBAZAR", "BORODIGHI", "CHALSHA", "MURTI", "LATAGURI", "KRANTI", "KALIMPONG", "DARJEELING", "LAVA", "CHUIKHIM", "RESOP", "LOLEGAON", "SAMSING", "JHALONG", "CHILAPATA", "BELAKOBA", "SHALBARI", "MANJING", "JHANDI", "NOKDARA", "SAMTHAR", "PUBUNG", "PANBU", "CHARKHOL", "SINGJEE", "GAJOLDOBA", "SILIGURI", "MIRIK", "NAXALBARI", "MATIGARA", "OTHERS"],
+  ownerDetails: ["MOBILE NO", "ROR PORCHA", "DEEDS", "SITE PLAN", "RESIDENT ADDRESS", "LEGAL HEIR"]
+};
+
 document.addEventListener('DOMContentLoaded', function() {
+  renderOptionCharts();
   fetchUserInfo();
   refreshAllData();
   
-  // Setup 10-second polling sync
   setInterval(function() {
-    refreshAllData(true); // Silent background refresh
+    refreshAllData(true);
   }, 10000);
-
-  // Setup Other choices listener
-  setupOtherInputTriggers();
 });
+
+// Render Checkbox Charts
+function renderOptionCharts() {
+  buildChart('chart-c-intended', OPTIONS.intendedUse, 'c-intended', 'c-intended-other');
+  buildChart('chart-c-specialty', OPTIONS.specialty, 'c-specialty', 'c-specialty-other');
+  buildChart('chart-c-location', OPTIONS.clientLocation, 'c-location', 'c-location-other');
+  
+  buildChart('chart-p-intended', OPTIONS.intendedUse, 'p-intended', 'p-intended-other');
+  buildChart('chart-p-specialty', OPTIONS.specialty, 'p-specialty', 'p-specialty-other');
+  buildChart('chart-p-location', OPTIONS.propertyLocation, 'p-location', 'p-location-other');
+  buildChart('chart-p-owner-details', OPTIONS.ownerDetails, 'p-owner-details', null);
+}
+
+function buildChart(containerId, optionsArray, groupName, otherInputId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+
+  optionsArray.forEach(function(opt) {
+    var label = document.createElement('label');
+    label.className = 'option-checkbox-item';
+    
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.name = groupName;
+    cb.value = opt;
+
+    if (opt === 'OTHERS' && otherInputId) {
+      cb.onchange = function() {
+        var oth = document.getElementById(otherInputId);
+        if (cb.checked) oth.classList.remove('hidden');
+        else oth.classList.add('hidden');
+      };
+    }
+
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(opt));
+    container.appendChild(label);
+  });
+}
+
+function getChartSelectedValues(groupName, otherInputId) {
+  var checkboxes = document.querySelectorAll('input[name="' + groupName + '"]:checked');
+  var results = [];
+  checkboxes.forEach(function(cb) {
+    var val = cb.value;
+    if (val === 'OTHERS' && otherInputId) {
+      var othVal = document.getElementById(otherInputId).value.trim();
+      if (othVal) results.push("OTHERS: " + othVal);
+      else results.push("OTHERS");
+    } else {
+      results.push(val);
+    }
+  });
+  return results.join(', ');
+}
+
+function setChartSelectedValues(groupName, otherInputId, rawString) {
+  var checkboxes = document.querySelectorAll('input[name="' + groupName + '"]');
+  checkboxes.forEach(function(cb) { cb.checked = false; });
+  if (otherInputId) document.getElementById(otherInputId).classList.add('hidden');
+
+  if (!rawString) return;
+  var items = String(rawString).split(',').map(function(s) { return s.trim(); });
+
+  items.forEach(function(item) {
+    if (item.indexOf('OTHERS:') === 0 && otherInputId) {
+      checkboxes.forEach(function(cb) { if (cb.value === 'OTHERS') cb.checked = true; });
+      var oth = document.getElementById(otherInputId);
+      oth.value = item.replace('OTHERS:', '').trim();
+      oth.classList.remove('hidden');
+    } else {
+      checkboxes.forEach(function(cb) { if (cb.value === item) cb.checked = true; });
+    }
+  });
+}
 
 function showLoading(text) {
   document.getElementById('loading-text').innerText = text || 'Loading...';
@@ -44,28 +123,19 @@ function showToast(msg) {
 }
 
 function fetchUserInfo() {
-  google.script.run
-    .withSuccessHandler(function(info) {
-      document.getElementById('user-email-display').innerText = info.email;
-    })
-    .getCurrentUserInfo();
+  google.script.run.withSuccessHandler(function(info) {
+    document.getElementById('user-email-display').innerText = info.email;
+  }).getCurrentUserInfo();
 }
 
 function refreshAllData(silent) {
   if (!silent) showLoading('Syncing with Google Sheets...');
-  
   google.script.run
     .withSuccessHandler(function(dashData) {
       state.dashboard = dashData;
       renderDashboard();
       document.getElementById('last-synced-time').innerText = dashData.lastSynced;
-      
-      // Fetch Detailed Lists
       fetchListsData(silent);
-    })
-    .withFailureHandler(function(err) {
-      hideLoading();
-      showToast('Sync Error: ' + err.message);
     })
     .getDashboardData();
 }
@@ -75,11 +145,9 @@ function fetchListsData(silent) {
     state.clients = clients;
     renderClientsTable();
     renderFollowups();
-    
     google.script.run.withSuccessHandler(function(props) {
       state.properties = props;
       renderPropertiesTable();
-      
       google.script.run.withSuccessHandler(function(tasks) {
         state.tasks = tasks;
         renderTasksTable();
@@ -89,18 +157,13 @@ function fetchListsData(silent) {
   }).getAllClients();
 }
 
-function refreshCurrentView() {
-  refreshAllData(false);
-}
+function refreshCurrentView() { refreshAllData(false); }
 
-// Navigation
 function navigateTo(viewId) {
   document.querySelectorAll('.app-view').forEach(function(v) { v.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
   
   document.getElementById(viewId).classList.add('active');
-  
-  // Highlight nav bar button
   if (viewId === 'view-dashboard') document.querySelectorAll('.nav-item')[0].classList.add('active');
   if (viewId === 'view-clients') document.querySelectorAll('.nav-item')[1].classList.add('active');
   if (viewId === 'view-properties') document.querySelectorAll('.nav-item')[2].classList.add('active');
@@ -108,7 +171,6 @@ function navigateTo(viewId) {
   if (viewId === 'view-followups') document.querySelectorAll('.nav-item')[4].classList.add('active');
 }
 
-// Render Dashboard
 function renderDashboard() {
   var d = state.dashboard;
   document.getElementById('dash-total-clients').innerText = d.totalClients || 0;
@@ -117,7 +179,6 @@ function renderDashboard() {
   document.getElementById('dash-followups-due').innerText = d.followupsDue || 0;
   document.getElementById('dash-overdue-subtext').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> ' + (d.followupsOverdue || 0) + ' Overdue';
 
-  // Todays Task List
   var ol = document.getElementById('todays-task-ol');
   ol.innerHTML = '';
   if (d.todaysTasks && d.todaysTasks.length > 0) {
@@ -132,14 +193,15 @@ function renderDashboard() {
   }
 }
 
-// ==========================================
-// CLIENT FORM & LIST
-// ==========================================
+// CLIENT FORM HANDLERS
 function openAddClientForm() {
   document.getElementById('form-client').reset();
   document.getElementById('c-id').value = '';
   document.getElementById('c-display-id').value = 'Auto Generated';
   document.getElementById('c-date').value = new Date().toISOString().split('T')[0];
+  setChartSelectedValues('c-intended', 'c-intended-other', '');
+  setChartSelectedValues('c-specialty', 'c-specialty-other', '');
+  setChartSelectedValues('c-location', 'c-location-other', '');
   document.getElementById('client-form-title').innerText = '+ ADD CLIENT';
   document.getElementById('modal-client-form').classList.remove('hidden');
 }
@@ -154,11 +216,11 @@ function handleClientSubmit(e) {
     name: document.getElementById('c-name').value,
     phone: document.getElementById('c-phone').value,
     address: document.getElementById('c-address').value,
-    intendedUse: getMultiSelectValues('c-intended', 'c-intended-other'),
-    specialty: getMultiSelectValues('c-specialty', 'c-specialty-other'),
+    intendedUse: getChartSelectedValues('c-intended', 'c-intended-other'),
+    specialty: getChartSelectedValues('c-specialty', 'c-specialty-other'),
     areaCategory: document.getElementById('c-area-category').value,
     ownerCategory: document.getElementById('c-owner-category').value,
-    location: getMultiSelectValues('c-location', 'c-location-other'),
+    location: getChartSelectedValues('c-location', 'c-location-other'),
     minSize: document.getElementById('c-min-size').value,
     maxSize: document.getElementById('c-max-size').value,
     sizeUnit: document.getElementById('c-size-unit').value,
@@ -176,17 +238,12 @@ function handleClientSubmit(e) {
       showToast('Client Saved Successfully (ID #' + res.clientId + ')');
       refreshAllData();
     })
-    .withFailureHandler(function(err) {
-      hideLoading();
-      showToast('Error saving client: ' + err.message);
-    })
     .saveClientRecord(data);
 }
 
 function renderClientsTable() {
   var tbody = document.getElementById('clients-tbody');
   tbody.innerHTML = '';
-  
   state.clients.forEach(function(c) {
     var tr = document.createElement('tr');
     tr.innerHTML = 
@@ -231,34 +288,24 @@ function openEditClientForm(clientId) {
   document.getElementById('c-status').value = c.status;
   document.getElementById('c-remarks').value = c.remarks;
 
-  setMultiSelectValues('c-intended', 'c-intended-other', c.intendedUse);
-  setMultiSelectValues('c-specialty', 'c-specialty-other', c.specialty);
-  setMultiSelectValues('c-location', 'c-location-other', c.location);
+  setChartSelectedValues('c-intended', 'c-intended-other', c.intendedUse);
+  setChartSelectedValues('c-specialty', 'c-specialty-other', c.specialty);
+  setChartSelectedValues('c-location', 'c-location-other', c.location);
 
   document.getElementById('client-form-title').innerText = 'EDIT CLIENT #' + c.clientId;
   document.getElementById('modal-client-form').classList.remove('hidden');
 }
 
-function confirmDeleteClient(id) {
-  if (confirm("Are you sure you want to permanently delete Client #" + id + "?")) {
-    showLoading('Deleting Client...');
-    google.script.run
-      .withSuccessHandler(function() {
-        showToast('Client #' + id + ' Deleted');
-        refreshAllData();
-      })
-      .deleteClientRecord(id);
-  }
-}
-
-// ==========================================
-// PROPERTY FORM & LIST
-// ==========================================
+// PROPERTY FORM HANDLERS
 function openAddPropertyForm() {
   document.getElementById('form-property').reset();
   document.getElementById('p-id').value = '';
   document.getElementById('p-display-id').value = 'Auto Generated';
   document.getElementById('p-date').value = new Date().toISOString().split('T')[0];
+  setChartSelectedValues('p-intended', 'p-intended-other', '');
+  setChartSelectedValues('p-specialty', 'p-specialty-other', '');
+  setChartSelectedValues('p-location', 'p-location-other', '');
+  setChartSelectedValues('p-owner-details', null, '');
   document.getElementById('property-form-title').innerText = '+ ADD PROPERTY';
   document.getElementById('modal-property-form').classList.remove('hidden');
 }
@@ -272,18 +319,18 @@ function handlePropertySubmit(e) {
     dateListed: document.getElementById('p-date').value,
     keyMan: document.getElementById('p-keyman').value,
     phone: document.getElementById('p-phone').value,
-    intendedUse: getMultiSelectValues('p-intended', 'p-intended-other'),
-    specialty: getMultiSelectValues('p-specialty', 'p-specialty-other'),
+    intendedUse: getChartSelectedValues('p-intended', 'p-intended-other'),
+    specialty: getChartSelectedValues('p-specialty', 'p-specialty-other'),
     areaCategory: document.getElementById('p-area-category').value,
     ownerCategory: document.getElementById('p-owner-category').value,
-    location: getMultiSelectValues('p-location', 'p-location-other'),
+    location: getChartSelectedValues('p-location', 'p-location-other'),
     size: document.getElementById('p-size').value,
     sizeUnit: document.getElementById('p-size-unit').value,
     price: document.getElementById('p-price').value,
     priceUnit: document.getElementById('p-price-unit').value,
     pricePlotUnit: document.getElementById('p-price-plot-unit').value,
     addressOfProperty: document.getElementById('p-address').value,
-    ownerDetails: getMultiSelectValues('p-owner-details', null),
+    ownerDetails: getChartSelectedValues('p-owner-details', null),
     roadInfra: document.getElementById('p-road').value,
     waterInfra: document.getElementById('p-water').value,
     electricityInfra: document.getElementById('p-electricity').value,
@@ -301,17 +348,12 @@ function handlePropertySubmit(e) {
       showToast('Property Saved Successfully (ID #' + res.propertyId + ')');
       refreshAllData();
     })
-    .withFailureHandler(function(err) {
-      hideLoading();
-      showToast('Error saving property: ' + err.message);
-    })
     .savePropertyRecord(data);
 }
 
 function renderPropertiesTable() {
   var tbody = document.getElementById('properties-tbody');
   tbody.innerHTML = '';
-  
   state.properties.forEach(function(p) {
     var tr = document.createElement('tr');
     tr.innerHTML = 
@@ -361,30 +403,16 @@ function openEditPropertyForm(propertyId) {
   document.getElementById('p-status').value = p.availableStatus;
   document.getElementById('p-remarks').value = p.remarks;
 
-  setMultiSelectValues('p-intended', 'p-intended-other', p.intendedUse);
-  setMultiSelectValues('p-specialty', 'p-specialty-other', p.specialty);
-  setMultiSelectValues('p-location', 'p-location-other', p.location);
-  setMultiSelectValues('p-owner-details', null, p.ownerDetails);
+  setChartSelectedValues('p-intended', 'p-intended-other', p.intendedUse);
+  setChartSelectedValues('p-specialty', 'p-specialty-other', p.specialty);
+  setChartSelectedValues('p-location', 'p-location-other', p.location);
+  setChartSelectedValues('p-owner-details', null, p.ownerDetails);
 
   document.getElementById('property-form-title').innerText = 'EDIT PROPERTY #' + p.propertyId;
   document.getElementById('modal-property-form').classList.remove('hidden');
 }
 
-function confirmDeleteProperty(id) {
-  if (confirm("Are you sure you want to delete Property listing #" + id + "?")) {
-    showLoading('Deleting Property...');
-    google.script.run
-      .withSuccessHandler(function() {
-        showToast('Property #' + id + ' Deleted');
-        refreshAllData();
-      })
-      .deletePropertyRecord(id);
-  }
-}
-
-// ==========================================
-// TASK FORM & LIST
-// ==========================================
+// TASK HANDLERS
 function openAddTaskForm() {
   document.getElementById('form-task').reset();
   document.getElementById('t-row-index').value = '';
@@ -396,15 +424,14 @@ function openAddTaskForm() {
 function handleTaskSubmit(e) {
   e.preventDefault();
   showLoading('Saving Task...');
-
   var data = {
     rowIndex: document.getElementById('t-row-index').value,
     date: document.getElementById('t-date').value,
     time: document.getElementById('t-time').value,
     task: document.getElementById('t-task').value,
-    taskType: getSelectWithOther('t-type', 't-type-other'),
+    taskType: document.getElementById('t-type').value,
     place: document.getElementById('t-place').value,
-    whoAttend: getSelectWithOther('t-who', 't-who-other'),
+    whoAttend: document.getElementById('t-who').value,
     status: document.getElementById('t-status').value,
     remarks: document.getElementById('t-remarks').value
   };
@@ -421,7 +448,6 @@ function handleTaskSubmit(e) {
 function renderTasksTable() {
   var tbody = document.getElementById('tasks-tbody');
   tbody.innerHTML = '';
-  
   state.tasks.forEach(function(t) {
     var tr = document.createElement('tr');
     tr.innerHTML = 
@@ -452,44 +478,23 @@ function openEditTaskForm(rowIndex) {
   document.getElementById('t-place').value = t.place;
   document.getElementById('t-status').value = t.status;
   document.getElementById('t-remarks').value = t.remarks;
-
-  setSelectWithOther('t-type', 't-type-other', t.taskType);
-  setSelectWithOther('t-who', 't-who-other', t.whoAttend);
+  document.getElementById('t-type').value = t.taskType;
+  document.getElementById('t-who').value = t.whoAttend;
 
   document.getElementById('task-form-title').innerText = 'EDIT TASK';
   document.getElementById('modal-task-form').classList.remove('hidden');
 }
 
-function confirmDeleteTask(rowIndex) {
-  if (confirm("Are you sure you want to delete this task entry?")) {
-    showLoading('Deleting Task...');
-    google.script.run
-      .withSuccessHandler(function() {
-        showToast('Task Removed');
-        refreshAllData();
-      })
-      .deleteTaskRecord(rowIndex);
-  }
-}
-
-// ==========================================
-// FOLLOW-UPS RENDERING
-// ==========================================
 function renderFollowups() {
   var overdueDiv = document.getElementById('followup-list-overdue');
   var todayDiv = document.getElementById('followup-list-today');
   var upcomingDiv = document.getElementById('followup-list-upcoming');
 
-  overdueDiv.innerHTML = '';
-  todayDiv.innerHTML = '';
-  upcomingDiv.innerHTML = '';
-
-  var now = new Date();
-  now.setHours(0,0,0,0);
+  overdueDiv.innerHTML = ''; todayDiv.innerHTML = ''; upcomingDiv.innerHTML = '';
+  var now = new Date(); now.setHours(0,0,0,0);
 
   state.clients.forEach(function(c) {
     if (c.status === 'Converted' || c.status === 'Close Deal' || !c.rawNextFollowUp) return;
-
     var fDate = new Date(c.rawNextFollowUp);
     if (isNaN(fDate.getTime())) return;
     fDate.setHours(0,0,0,0);
@@ -504,23 +509,16 @@ function renderFollowups() {
       '</div>' +
       '<button class="btn-primary" onclick="openEditClientForm(' + c.clientId + ')">Update</button>';
 
-    if (fDate.getTime() < now.getTime()) {
-      overdueDiv.appendChild(card);
-    } else if (fDate.getTime() === now.getTime()) {
-      todayDiv.appendChild(card);
-    } else {
-      upcomingDiv.appendChild(card);
-    }
+    if (fDate.getTime() < now.getTime()) overdueDiv.appendChild(card);
+    else if (fDate.getTime() === now.getTime()) todayDiv.appendChild(card);
+    else upcomingDiv.appendChild(card);
   });
 
-  if (!overdueDiv.hasChildNodes()) overdueDiv.innerHTML = '<p class="text-muted">No overdue follow-ups!</p>';
-  if (!todayDiv.hasChildNodes()) todayDiv.innerHTML = '<p class="text-muted">No follow-ups due today.</p>';
-  if (!upcomingDiv.hasChildNodes()) upcomingDiv.innerHTML = '<p class="text-muted">No upcoming follow-ups scheduled.</p>';
+  if (!overdueDiv.hasChildNodes()) overdueDiv.innerHTML = '<p>No overdue follow-ups!</p>';
+  if (!todayDiv.hasChildNodes()) todayDiv.innerHTML = '<p>No follow-ups due today.</p>';
+  if (!upcomingDiv.hasChildNodes()) upcomingDiv.innerHTML = '<p>No upcoming follow-ups scheduled.</p>';
 }
 
-// ==========================================
-// MATCHMAKER INTERFACE CONTROLLER
-// ==========================================
 function openMatchmakerModal(mode) {
   state.currentMatchmakerMode = mode;
   var sel = document.getElementById('matchmaker-select-item');
@@ -530,7 +528,6 @@ function openMatchmakerModal(mode) {
     document.getElementById('matchmaker-title').innerText = 'MATCHMAKER BY PROPERTY';
     document.getElementById('matchmaker-select-label').innerText = 'Select Property to Find Matching Clients:';
     document.getElementById('matchmaker-options').classList.add('hidden');
-
     state.properties.forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.propertyId;
@@ -541,7 +538,6 @@ function openMatchmakerModal(mode) {
     document.getElementById('matchmaker-title').innerText = 'MATCHMAKER BY CLIENT';
     document.getElementById('matchmaker-select-label').innerText = 'Select Client Requirement to Find Properties:';
     document.getElementById('matchmaker-options').classList.remove('hidden');
-
     state.clients.forEach(function(c) {
       var opt = document.createElement('option');
       opt.value = c.clientId;
@@ -557,18 +553,13 @@ function openMatchmakerModal(mode) {
 function executeMatchmaking() {
   var id = document.getElementById('matchmaker-select-item').value;
   if (!id) return;
-
   showLoading('Running Matchmaking Engine...');
 
   if (state.currentMatchmakerMode === 'property') {
-    google.script.run
-      .withSuccessHandler(renderPropertyMatches)
-      .matchMakerByProperty(id);
+    google.script.run.withSuccessHandler(renderPropertyMatches).matchMakerByProperty(id);
   } else {
     var includeSold = document.getElementById('match-include-sold').checked;
-    google.script.run
-      .withSuccessHandler(renderClientMatches)
-      .matchMakerByClient(id, includeSold);
+    google.script.run.withSuccessHandler(renderClientMatches).matchMakerByClient(id, includeSold);
   }
 }
 
@@ -576,21 +567,12 @@ function renderClientMatches(res) {
   hideLoading();
   var container = document.getElementById('matchmaker-results-container');
   container.innerHTML = '<h4>Matches for Client #' + res.client.clientId + ' (' + escapeHtml(res.client.name) + ')</h4>';
-
   if (!res.matches || res.matches.length === 0) {
-    container.innerHTML += '<p>No matching properties found based on current requirements.</p>';
-    return;
+    container.innerHTML += '<p>No matching properties found.</p>'; return;
   }
-
   res.matches.forEach(function(m) {
     var box = document.createElement('div');
-    box.className = 'match-result-card';
-    box.style.border = '1px solid #ccc';
-    box.style.borderRadius = '8px';
-    box.style.padding = '10px';
-    box.style.marginBottom = '8px';
-    box.style.background = '#fdfdfd';
-
+    box.style.border = '1px solid #ccc'; box.style.borderRadius = '8px'; box.style.padding = '10px'; box.style.marginBottom = '8px';
     box.innerHTML = 
       '<div style="display:flex; justify-content:space-between; font-weight:bold;">' +
         '<span>Property #' + m.property.propertyId + ' - ' + escapeHtml(m.property.location) + '</span>' +
@@ -599,7 +581,6 @@ function renderClientMatches(res) {
       '<div>Price: ' + m.property.price + ' ' + m.property.priceUnit + ' | Size: ' + m.property.size + ' ' + m.property.sizeUnit + '</div>' +
       '<div style="font-size:12px; color:green; margin-top:4px;">✔ ' + m.matchReasons.join('<br>✔ ') + '</div>' +
       (m.mismatchReasons.length > 0 ? '<div style="font-size:12px; color:red; margin-top:4px;">✖ ' + m.mismatchReasons.join('<br>✖ ') + '</div>' : '');
-
     container.appendChild(box);
   });
 }
@@ -608,21 +589,12 @@ function renderPropertyMatches(res) {
   hideLoading();
   var container = document.getElementById('matchmaker-results-container');
   container.innerHTML = '<h4>Matching Clients for Property #' + res.property.propertyId + ' (' + escapeHtml(res.property.location) + ')</h4>';
-
   if (!res.matches || res.matches.length === 0) {
-    container.innerHTML += '<p>No matching client requirements found.</p>';
-    return;
+    container.innerHTML += '<p>No matching client requirements found.</p>'; return;
   }
-
   res.matches.forEach(function(m) {
     var box = document.createElement('div');
-    box.className = 'match-result-card';
-    box.style.border = '1px solid #ccc';
-    box.style.borderRadius = '8px';
-    box.style.padding = '10px';
-    box.style.marginBottom = '8px';
-    box.style.background = '#fdfdfd';
-
+    box.style.border = '1px solid #ccc'; box.style.borderRadius = '8px'; box.style.padding = '10px'; box.style.marginBottom = '8px';
     box.innerHTML = 
       '<div style="display:flex; justify-content:space-between; font-weight:bold;">' +
         '<span>Client #' + m.client.clientId + ' - ' + escapeHtml(m.client.name) + ' (' + m.client.phone + ')</span>' +
@@ -631,145 +603,32 @@ function renderPropertyMatches(res) {
       '<div>Budget: ' + m.client.minBudget + '-' + m.client.maxBudget + ' ' + m.client.budgetUnit + '</div>' +
       '<div style="font-size:12px; color:green; margin-top:4px;">✔ ' + m.matchReasons.join('<br>✔ ') + '</div>' +
       (m.mismatchReasons.length > 0 ? '<div style="font-size:12px; color:red; margin-top:4px;">✖ ' + m.mismatchReasons.join('<br>✖ ') + '</div>' : '');
-
     container.appendChild(box);
   });
 }
 
-// ==========================================
-// HELPERS & FORM CONTROL UTILITIES
-// ==========================================
-function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
-}
-
-function saveAndAddAnotherClient() {
-  document.getElementById('c-id').value = '';
-  document.getElementById('form-client').reset();
-  openAddClientForm();
-}
-
-function saveAndAddAnotherProperty() {
-  document.getElementById('p-id').value = '';
-  document.getElementById('form-property').reset();
-  openAddPropertyForm();
-}
-
-function getMultiSelectValues(selectId, otherInputId) {
-  var select = document.getElementById(selectId);
-  var result = [];
-  for (var i = 0; i < select.options.length; i++) {
-    if (select.options[i].selected) {
-      var val = select.options[i].value;
-      if (val === 'OTHERS' && otherInputId) {
-        var otherVal = document.getElementById(otherInputId).value.trim();
-        if (otherVal) result.push("OTHERS: " + otherVal);
-      } else {
-        result.push(val);
-      }
-    }
-  }
-  return result.join(', ');
-}
-
-function setMultiSelectValues(selectId, otherInputId, rawString) {
-  var select = document.getElementById(selectId);
-  if (!rawString) return;
-  var items = String(rawString).split(',').map(function(s) { return s.trim(); });
-  
-  for (var i = 0; i < select.options.length; i++) {
-    select.options[i].selected = false;
-  }
-
-  items.forEach(function(item) {
-    if (item.indexOf('OTHERS:') === 0 && otherInputId) {
-      for (var i = 0; i < select.options.length; i++) {
-        if (select.options[i].value === 'OTHERS') select.options[i].selected = true;
-      }
-      document.getElementById(otherInputId).value = item.replace('OTHERS:', '').trim();
-      document.getElementById(otherInputId).classList.remove('hidden');
-    } else {
-      for (var k = 0; k < select.options.length; k++) {
-        if (select.options[k].value === item) select.options[k].selected = true;
-      }
-    }
-  });
-}
-
-function getSelectWithOther(selectId, otherInputId) {
-  var val = document.getElementById(selectId).value;
-  if (val === 'Others' && otherInputId) {
-    var oth = document.getElementById(otherInputId).value.trim();
-    if (oth) return "Others: " + oth;
-  }
-  return val;
-}
-
-function setSelectWithOther(selectId, otherInputId, value) {
-  if (!value) return;
-  if (value.indexOf('Others:') === 0 && otherInputId) {
-    document.getElementById(selectId).value = 'Others';
-    document.getElementById(otherInputId).value = value.replace('Others:', '').trim();
-    document.getElementById(otherInputId).classList.remove('hidden');
-  } else {
-    document.getElementById(selectId).value = value;
-  }
-}
-
-function setupOtherInputTriggers() {
-  ['c-intended', 'c-specialty', 'c-location', 'p-intended', 'p-specialty', 'p-location'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('change', function() {
-        var otherInput = document.getElementById(id + '-other');
-        var hasOther = Array.from(el.selectedOptions).some(function(opt) { return opt.value === 'OTHERS'; });
-        if (hasOther && otherInput) otherInput.classList.remove('hidden');
-        else if (otherInput) otherInput.classList.add('hidden');
-      });
-    }
-  });
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function cleanPhoneForWa(phone) {
-  if (!phone) return '';
-  return String(phone).replace(/[^0-9]/g, '');
-}
-
-function formatDateForInput(dStr) {
-  if (!dStr) return '';
-  var d = new Date(dStr);
-  if (isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
-}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function saveAndAddAnotherClient() { document.getElementById('c-id').value = ''; document.getElementById('form-client').reset(); openAddClientForm(); }
+function saveAndAddAnotherProperty() { document.getElementById('p-id').value = ''; document.getElementById('form-property').reset(); openAddPropertyForm(); }
+function escapeHtml(str) { if (!str) return ''; return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function cleanPhoneForWa(phone) { if (!phone) return ''; return String(phone).replace(/[^0-9]/g, ''); }
+function formatDateForInput(dStr) { if (!dStr) return ''; var d = new Date(dStr); if (isNaN(d.getTime())) return ''; return d.toISOString().split('T')[0]; }
 
 function filterClientsTable() {
   var q = document.getElementById('client-search').value.toLowerCase();
   var st = document.getElementById('client-filter-status').value;
-  var rows = document.querySelectorAll('#clients-tbody tr');
-
-  rows.forEach(function(row) {
+  document.querySelectorAll('#clients-tbody tr').forEach(function(row) {
     var text = row.innerText.toLowerCase();
-    var matchSearch = !q || text.indexOf(q) !== -1;
-    var matchStatus = !st || text.indexOf(st.toLowerCase()) !== -1;
-    row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+    row.style.display = ((!q || text.indexOf(q) !== -1) && (!st || text.indexOf(st.toLowerCase()) !== -1)) ? '' : 'none';
   });
 }
 
 function filterPropertiesTable() {
   var q = document.getElementById('prop-search').value.toLowerCase();
   var st = document.getElementById('prop-filter-status').value;
-  var rows = document.querySelectorAll('#properties-tbody tr');
-
-  rows.forEach(function(row) {
+  document.querySelectorAll('#properties-tbody tr').forEach(function(row) {
     var text = row.innerText.toLowerCase();
-    var matchSearch = !q || text.indexOf(q) !== -1;
-    var matchStatus = !st || text.indexOf(st.toLowerCase()) !== -1;
-    row.style.display = (matchSearch && matchStatus) ? '' : 'none';
+    row.style.display = ((!q || text.indexOf(q) !== -1) && (!st || text.indexOf(st.toLowerCase()) !== -1)) ? '' : 'none';
   });
 }
 </script>
