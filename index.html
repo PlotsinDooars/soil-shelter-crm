@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soil & Shelter CRM - Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 font-sans">
+
+  <!-- Header -->
+  <header class="bg-slate-900 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-emerald-600 text-white p-2 rounded-lg font-bold text-xl">S&S</div>
+        <div>
+          <h1 class="text-xl font-bold tracking-wide">Soil & Shelter CRM</h1>
+          <p class="text-xs text-slate-400">Real Estate Matchmaker & Management</p>
+        </div>
+      </div>
+      <div id="syncBadge" class="flex items-center gap-2 bg-amber-500/20 text-amber-300 text-xs px-3 py-1.5 rounded-full border border-amber-500/30">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span>Connecting to Database...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- Section 1: Matchmaker Controls -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      <h2 class="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Two-Way Matchmaker Engine
+      </h2>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Matchmaker by Property -->
+        <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 space-y-3">
+          <label class="block text-sm font-semibold text-slate-700">Property to Client Match</label>
+          <select id="propertySelect" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="">Loading Properties...</option>
+          </select>
+          <button onclick="runPropertyMatch()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-sm py-2 px-4 rounded-lg transition duration-150">
+            Find Matching Clients
+          </button>
+        </div>
+
+        <!-- Matchmaker by Client -->
+        <div class="bg-slate-50 p-5 rounded-lg border border-slate-200 space-y-3">
+          <label class="block text-sm font-semibold text-slate-700">Client to Property Match</label>
+          <select id="clientSelect" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="">Loading Clients...</option>
+          </select>
+          <button onclick="runClientMatch()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm py-2 px-4 rounded-lg transition duration-150">
+            Find Matching Properties
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Results & Search Filter -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Matching Results</h2>
+          <p id="resultsCount" class="text-xs text-slate-500">Select a criteria above to run matching logic</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Search Box -->
+          <input id="searchInput" onkeyup="filterResults()" type="text" placeholder="Filter results..." class="bg-slate-50 border border-slate-300 text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-slate-400 focus:outline-none" />
+          
+          <!-- Export CSV -->
+          <button onclick="exportToCSV()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium py-2 px-3 rounded-lg flex items-center gap-1 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Table / List Container -->
+      <div class="overflow-x-auto border border-slate-200 rounded-lg">
+        <table class="w-full text-left text-sm text-slate-600">
+          <thead id="tableHead" class="bg-slate-100 text-xs uppercase font-semibold text-slate-700 border-b border-slate-200">
+            <tr>
+              <th class="px-4 py-3">Select a Matchmaker option above to populate data.</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-slate-200 bg-white">
+            <tr>
+              <td class="px-4 py-8 text-center text-slate-400">No active searches performed yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // Web App URL from Google Apps Script
+    const API_URL = "https://script.google.com/macros/s/AKfycby5tXW301hJqWj1-E7x3r2IWWq44YvhK_5J3I_eA4lZpQ6d_b0A40N4BwL_9jC/exec";
+
+    let rawResultsData = [];
+
+    // On Page Load: Fetch Dropdowns
+    window.addEventListener("DOMContentLoaded", fetchDropdowns);
+
+    async function fetchDropdowns() {
+      try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+
+        // Update Sync Badge
+        const syncBadge = document.getElementById("syncBadge");
+        syncBadge.className = "flex items-center gap-2 bg-emerald-500/20 text-emerald-300 text-xs px-3 py-1.5 rounded-full border border-emerald-500/30";
+        syncBadge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Live Sync Active</span>`;
+
+        // Populate Properties Dropdown
+        const propSelect = document.getElementById("propertySelect");
+        propSelect.innerHTML = `<option value="">-- Select Property --</option>`;
+        data.properties.forEach(p => {
+          propSelect.innerHTML += `<option value="${p.id}">${p.label}</option>`;
+        });
+
+        // Populate Clients Dropdown
+        const clientSelect = document.getElementById("clientSelect");
+        clientSelect.innerHTML = `<option value="">-- Select Client --</option>`;
+        data.clients.forEach(c => {
+          clientSelect.innerHTML += `<option value="${c.id}">${c.label}</option>`;
+        });
+
+      } catch (error) {
+        console.error("Error fetching dropdowns:", error);
+        document.getElementById("syncBadge").innerHTML = `<span class="w-2 h-2 rounded-full bg-red-400"></span><span>Sync Error</span>`;
+      }
+    }
+
+    // Run Matchmaker by Property
+    async function runPropertyMatch() {
+      const propId = document.getElementById("propertySelect").value;
+      if (!propId) return alert("Please select a Property first.");
+
+      showLoadingState();
+      try {
+        const res = await fetch(`${API_URL}?action=matchClients&id=${encodeURIComponent(propId)}`);
+        const data = await res.json();
+        rawResultsData = data;
+        renderClientResults(data);
+      } catch (err) {
+        alert("Failed to perform match request.");
+        console.error(err);
+      }
+    }
+
+    // Run Matchmaker by Client
+    async function runClientMatch() {
+      const clientId = document.getElementById("clientSelect").value;
+      if (!clientId) return alert("Please select a Client first.");
+
+      showLoadingState();
+      try {
+        const res = await fetch(`${API_URL}?action=matchProperties&id=${encodeURIComponent(clientId)}`);
+        const data = await res.json();
+        rawResultsData = data;
+        renderPropertyResults(data);
+      } catch (err) {
+        alert("Failed to perform match request.");
+        console.error(err);
+      }
+    }
+
+    function showLoadingState() {
+      document.getElementById("tableHead").innerHTML = `<tr><th class="px-4 py-3">Searching...</th></tr>`;
+      document.getElementById("tableBody").innerHTML = `<tr><td class="px-4 py-8 text-center text-slate-500">Evaluating matching conditions...</td></tr>`;
+    }
+
+    function renderClientResults(clients) {
+      document.getElementById("resultsCount").innerText = `Found ${clients.length} matching client(s)`;
+      
+      const head = document.getElementById("tableHead");
+      head.innerHTML = `
+        <tr>
+          <th class="px-4 py-3">Client ID</th>
+          <th class="px-4 py-3">Name</th>
+          <th class="px-4 py-3">Phone</th>
+          <th class="px-4 py-3">Location</th>
+          <th class="px-4 py-3">Intended Use</th>
+        </tr>
+      `;
+
+      const body = document.getElementById("tableBody");
+      if (clients.length === 0) {
+        body.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-slate-400">No matching clients found for this property.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = clients.map(c => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-4 py-3 font-semibold text-slate-900">#${c.clientID}</td>
+          <td class="px-4 py-3">${c.name}</td>
+          <td class="px-4 py-3">${c.phone || 'N/A'}</td>
+          <td class="px-4 py-3">${c.location}</td>
+          <td class="px-4 py-3"><span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-medium">${c.intendedUse}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderPropertyResults(properties) {
+      document.getElementById("resultsCount").innerText = `Found ${properties.length} matching property(ies)`;
+
+      const head = document.getElementById("tableHead");
+      head.innerHTML = `
+        <tr>
+          <th class="px-4 py-3">Prop ID</th>
+          <th class="px-4 py-3">Key Man</th>
+          <th class="px-4 py-3">Location</th>
+          <th class="px-4 py-3">Size</th>
+          <th class="px-4 py-3">Price</th>
+        </tr>
+      `;
+
+      const body = document.getElementById("tableBody");
+      if (properties.length === 0) {
+        body.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-slate-400">No matching properties found for this client.</td></tr>`;
+        return;
+      }
+
+      body.innerHTML = properties.map(p => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="px-4 py-3 font-semibold text-slate-900">#${p.propertyID}</td>
+          <td class="px-4 py-3">${p.keyMan || 'N/A'}</td>
+          <td class="px-4 py-3">${p.location}</td>
+          <td class="px-4 py-3">${p.size}</td>
+          <td class="px-4 py-3 font-medium text-emerald-700">${p.price}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Instant Search Filter
+    function filterResults() {
+      const term = document.getElementById("searchInput").value.toLowerCase();
+      const rows = document.querySelectorAll("#tableBody tr");
+      rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(term) ? "" : "none";
+      });
+    }
+
+    // CSV Export
+    function exportToCSV() {
+      if (!rawResultsData || rawResultsData.length === 0) return alert("No match data available to export.");
+
+      const keys = Object.keys(rawResultsData[0]);
+      let csvContent = "data:text/csv;charset=utf-8," + keys.join(",") + "\n";
+
+      rawResultsData.forEach(row => {
+        let values = keys.map(k => `"${(row[k] || '').toString().replace(/"/g, '""')}"`);
+        csvContent += values.join(",") + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "soil_shelter_match_results.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
